@@ -1,0 +1,540 @@
+#include <iostream>
+#include <ctime>
+#include <cstdlib>
+#include <vector>
+#include <cmath>
+#include <bitset>
+#include <numeric>
+#include "utils.hpp"
+#include "Reconstructor/Reconstructor.hpp"
+
+using namespace MDR;
+
+template <class T, class Decomposer, class Interleaver, class Encoder, class Compressor, class ErrorEstimator, class SizeInterpreter, class Retriever>
+MDR::ComposedReconstructor<T, Decomposer, Interleaver, Encoder, Compressor, SizeInterpreter, ErrorEstimator, Retriever> generateReconstructor(Decomposer decomposer, Interleaver interleaver, Encoder encoder, Compressor compressor, ErrorEstimator estimator, SizeInterpreter interpreter, Retriever retriever){
+    auto reconstructor = MDR::ComposedReconstructor<T, Decomposer, Interleaver, Encoder, Compressor, SizeInterpreter, ErrorEstimator, Retriever>(decomposer, interleaver, encoder, compressor, interpreter, retriever);
+    return reconstructor;
+}
+
+const std::string data_file_prefix = "/Users/xliang/Dataset/GE/data/";
+const std::string rdata_file_prefix = "/Users/xliang/Dataset/GE/refactor/";
+const std::vector<std::string> varlist = {"VelocityX", "VelocityY", "VelocityZ", "Pressure", "Density"};
+const int n_vars = 5;
+
+// f(x) = x^2
+template <class T>
+inline double compute_bound_x_square(T x, T eb){
+	return 2*fabs(x)*eb + eb*eb;
+}
+
+// f(x) = x^2
+template <class T>
+inline double compute_inverse_bound_x_square(T x, T eb, T tau){
+	return sqrt(x*x + tau) - x*x;
+}
+
+// f(x) = sqrt(x)
+template <class T>
+inline double compute_bound_square_root_x(T x, T eb){
+	if(x == 0) {
+		return sqrt(eb);
+	}
+	if(x > eb){
+		return eb / (sqrt(x - eb) + sqrt(x));
+	}
+	else{
+		return eb / sqrt(x);
+	}
+}
+
+// f(x) = sqrt(x)
+template <class T>
+inline double compute_inverse_bound_square_root_x(T x, T eb, T tau){
+	if(x == 0){
+		return tau * tau;
+	}
+	if(x > eb){
+		return tau * (sqrt(x - eb) + sqrt(x));
+	}
+	else{
+		return tau * sqrt(x);
+	}
+}
+
+// f(x) = 1/(x+a)
+template <class T>
+inline double compute_bound_radical(T x, T a, T eb){
+	if(fabs(x+a) > eb){
+		if(x+a > 0){
+			return eb / ((x+a-eb)*fabs(x+a));
+		}
+		else{
+			return eb / ((x+a+eb)*fabs(x+a));
+		}
+	}
+	else{
+		std::cout << "Warning: cannot control error in 1/(x+a)\n";
+		return 0;		
+	}
+}
+
+// f(x) = 1/(x+a)
+template <class T>
+inline double compute_inverse_bound_radical(T x, T a, T eb, T tau){
+	if(fabs(x+a) > eb){
+		if(x+a > 0){
+			return tau * ((x+a-eb)*fabs(x+a));
+		}
+		else{
+			return tau * ((x+a+eb)*fabs(x+a));
+		}
+	}
+	else{
+		std::cout << "Warning: cannot control error in 1/(x+a)\n";
+		return 0;		
+	}
+}
+
+template <class T>
+inline double compute_bound_multiplication(T x, T y, T eb_x, T eb_y){
+	return fabs(x)*eb_y + fabs(y)*eb_x + eb_x*eb_y;
+}
+
+// f(x, y) = x/y
+template <class T>
+inline double compute_bound_division(T x, T y, T eb_x, T eb_y){
+	if(eb_y < fabs(y)){
+		double e = fabs(x)*eb_y + fabs(y)*eb_x;
+		if(y > 0) return e / (y*(y - eb_y));
+		else return e/ (y*(y + eb_y));
+	}
+	else{
+		std::cout << "Warning: cannot control error in x/y\n";
+		return 0;
+	}
+}
+
+template <class T>
+void print_error(std::string varname, T dec, T ori, T est){
+	std::cout << varname << ": dec = " << dec << ", ori = " << ori << ", error = " << dec - ori << ", est = " << est << std::endl; 
+}
+
+std::vector<double> P_ori;
+std::vector<double> D_ori;
+std::vector<double> Vx_ori;
+std::vector<double> Vy_ori;
+std::vector<double> Vz_ori;
+double * P_dec = NULL;
+double * D_dec = NULL;
+double * Vx_dec = NULL;
+double * Vy_dec = NULL;
+double * Vz_dec = NULL;
+double * V_TOT_ori = NULL;
+double * Temp_ori = NULL;
+double * C_ori = NULL;
+double * Mach_ori = NULL;
+double * PT_ori = NULL;
+double * mu_ori = NULL;
+std::vector<double> error_V_TOT;
+std::vector<double> error_Temp;
+std::vector<double> error_C;
+std::vector<double> error_Mach;
+std::vector<double> error_PT;
+std::vector<double> error_mu;
+std::vector<double> error_est_V_TOT;
+std::vector<double> error_est_Temp;
+std::vector<double> error_est_C;
+std::vector<double> error_est_Mach;
+std::vector<double> error_est_PT;
+std::vector<double> error_est_mu;
+const std::vector<std::string> names{"V_TOT", "T", "C", "Mach", "PT", "mu"};
+// estimate error from decompressed data and error bound
+// return next eb
+template <class T>
+void estimate_error(const T * Vx, const T * Vy, const T * Vz, const T * P, const T * D, size_t n, const std::vector<double>& tau, std::vector<double>& ebs){
+
+	double eb_Vx = ebs[0];
+	double eb_Vy = ebs[1];
+	double eb_Vz = ebs[2];
+	double eb_P = ebs[3];
+	double eb_D = ebs[4];
+	double R = 287.1;
+	double gamma = 1.4;
+	double mi = 3.5;
+	double mu_r = 1.716e-5;
+	double T_r = 273.15;
+	double S = 110.4;
+	double c_1 = 1.0 / R;
+	double c_2 = sqrt(gamma * R);
+	double c_3 = T_r + S;
+	int C7i[8] = {1, 7, 21, 35, 35, 21, 7, 1};
+	std::vector<double> max_values(6);
+	std::vector<int> max_index(6);
+	for(int i=0; i<n; i++){
+		// error of total velocity square
+		double e_V_TOT_2 = compute_bound_x_square(Vx[i], eb_Vx) + compute_bound_x_square(Vy[i], eb_Vy) + compute_bound_x_square(Vz[i], eb_Vz);
+		double V_TOT_2 = Vx[i]*Vx[i] + Vy[i]*Vy[i] + Vz[i]*Vz[i];
+		// error of total velocity
+		double e_V_TOT = compute_bound_square_root_x(V_TOT_2, e_V_TOT_2);
+		double V_TOT = sqrt(V_TOT_2);
+		// print_error("V_TOT", V_TOT, V_TOT_ori[i], e_V_TOT);
+		// error of temperature
+		double e_T = c_1 * compute_bound_division(P[i], D[i], eb_P, eb_D);
+		double Temp = P[i] / (D[i] * R);
+		// print_error("T", Temp, Temp_ori[i], e_T);
+		// error of C
+		double e_C = c_2*compute_bound_square_root_x(Temp, e_T);
+		double C = c_2 * sqrt(Temp);
+		// print_error("C", C, C_ori[i], e_C);
+		double e_Mach = compute_bound_division(V_TOT, C, e_V_TOT, e_C);
+		double Mach = V_TOT / C;
+		// print_error("Mach", Mach, Mach_ori[i], e_Mach);
+		// 1 + gamma/2 *Mach*Mach
+		double e_Mach_tmp = (gamma-1) / 2 * compute_bound_x_square(Mach, e_Mach);
+		double Mach_tmp = 1 + (gamma-1)/2 * Mach * Mach;
+		double e_Mach_tmp_mi = 0;
+		for(int i=1; i<=7; i++){
+			e_Mach_tmp_mi += C7i[i] * pow(Mach_tmp, 7-i) * pow(e_Mach_tmp, i);
+		}
+		double Mach_tmp_mi = sqrt(pow(Mach_tmp, 7));
+		double e_PT = compute_bound_multiplication(P[i], Mach_tmp_mi, eb_P, e_Mach_tmp_mi);
+		double PT = P[i] * Mach_tmp_mi;
+		// print_error("PT", PT, PT_ori[i], e_PT);
+		double e_TrS_TS = c_3 * compute_bound_radical(Temp, S, e_T);
+		double TrS_TS = c_3 / (Temp + S);
+		double e_T_Tr_3 = 3*pow(Temp/T_r, 2)*(e_T/T_r) + 3*Temp/T_r*(e_T/T_r)*(e_T/T_r) + (e_T/T_r)*(e_T/T_r)*(e_T/T_r);
+		double T_Tr_3 = pow(Temp/T_r, 3);
+		double e_T_Tr_3_sqrt = compute_bound_square_root_x(T_Tr_3, e_T_Tr_3);
+		double T_Tr_3_sqrt = sqrt(T_Tr_3);
+		double e_mu = mu_r * compute_bound_multiplication(T_Tr_3_sqrt, TrS_TS, e_T_Tr_3_sqrt, e_TrS_TS);
+		double mu = mu_r * T_Tr_3_sqrt * TrS_TS;
+		// print_error("mu", mu, mu_ori[i], e_mu);
+		// if(i == 7618){
+		// 	std::cout << eb_Vx << " " << eb_Vy << " " << eb_Vz << " " << eb_P << " " << eb_D << std::endl;
+		// 	std::cout << "ori data = " << Vx_ori[i] << ", " << Vy_ori[i] << ", " << Vz_ori[i] << ", " << P_ori[i] << ", " << D_ori[i] << std::endl;
+		// 	std::cout << "dec data = " << Vx[i] << ", " << Vy[i] << ", " << Vz[i] << ", " << P[i] << ", " << D[i] << std::endl;
+		// 	print_error("V_TOT", V_TOT, V_TOT_ori[i], e_V_TOT);
+		// 	print_error("V_TOT_2", V_TOT_2, Vx_ori[i]*Vx_ori[i] + Vy_ori[i]*Vy_ori[i] + Vz_ori[i]*Vz_ori[i], e_V_TOT_2);
+		// 	print_error("T", Temp, Temp_ori[i], e_T);
+		// 	print_error("C", C, C_ori[i], e_C);
+		// 	print_error("Mach", Mach, Mach_ori[i], e_Mach);
+		// 	print_error("PT", PT, PT_ori[i], e_PT);
+		// 	print_error("mu", mu, mu_ori[i], e_mu);
+		// 	std::cout << "Mach_tmp: " << Mach_tmp << " " << e_Mach_tmp << std::endl;
+		// 	std::cout << "Mach_tmp_mi: " << Mach_tmp_mi << " " << e_Mach_tmp_mi << std::endl;
+		// 	// exit(-1);
+		// }
+		error_est_V_TOT[i] = e_V_TOT;
+		error_est_Temp[i] = e_T;
+		error_est_C[i] = e_C;
+		error_est_Mach[i] = e_Mach;
+		error_est_PT[i] = e_PT;
+		error_est_mu[i] = e_mu;
+		error_V_TOT[i] = V_TOT - V_TOT_ori[i];
+		error_Temp[i] = Temp - Temp_ori[i];
+		error_C[i] = C - C_ori[i];
+		error_Mach[i] = Mach - Mach_ori[i];
+		error_PT[i] = PT - PT_ori[i];
+		error_mu[i] = mu - mu_ori[i];
+		if(max_values[0] < error_est_V_TOT[i]){
+			max_values[0] = error_est_V_TOT[i];
+			max_index[0] = i;
+		}
+		if(max_values[1] < error_est_Temp[i]){
+			max_values[1] = error_est_Temp[i];
+			max_index[1] = i;
+		}
+		if(max_values[2] < error_est_C[i]){
+			max_values[2] = error_est_C[i];
+			max_index[2] = i;
+		}
+		if(max_values[3] < error_est_Mach[i]){
+			max_values[3] = error_est_Mach[i];
+			max_index[3] = i;
+		}
+		if(max_values[4] < error_est_PT[i]){
+			max_values[4] = error_est_PT[i];
+			max_index[4] = i;
+		}
+		if(max_values[5] < error_est_mu[i]){
+			max_values[5] = error_est_mu[i];
+			max_index[5] = i;
+		}
+	}
+	for(int i=0; i<6; i++){
+		std::cout << names[i] << ": max estimated error = " << max_values[i] << ", index = " << max_index[i] << std::endl;
+	}
+
+	// estimate error bound based on maximal errors
+	{
+		std::vector<double> new_ebs(5, 0);
+		int i = max_index[0];
+		// error of total velocity square
+		double e_V_TOT_2 = compute_bound_x_square(Vx[i], eb_Vx) + compute_bound_x_square(Vy[i], eb_Vy) + compute_bound_x_square(Vz[i], eb_Vz);
+		double V_TOT_2 = Vx[i]*Vx[i] + Vy[i]*Vy[i] + Vz[i]*Vz[i];
+		// error of total velocity
+		double e_V_TOT = compute_bound_square_root_x(V_TOT_2, e_V_TOT_2);
+		double V_TOT = sqrt(V_TOT_2);
+		double new_e_V_TOT_2 = compute_inverse_bound_square_root_x(V_TOT, e_V_TOT, tau[0]);
+		// compute assignment on Vx, Vy, Vz
+		double e1 = 2*fabs(Vx[i])*eb_Vx + 2*fabs(Vy[i])*eb_Vy + 2*fabs(Vz[i])*eb_Vz;
+		double e2 = eb_Vx*eb_Vx + eb_Vy*eb_Vy  + eb_Vz*eb_Vz;
+		// assuming the same scale on error bound deduction
+		double scale = (-e1 + sqrt(e1*e1 + 4*e2*new_e_V_TOT_2))/(2*e2);
+		if(scale < 1){
+			new_ebs[0] = ebs[0] * scale;
+			new_ebs[1] = ebs[1] * scale;
+			new_ebs[2] = ebs[2] * scale;			
+		}
+		// error of temperature
+		i = max_index[1];
+		double e_T = c_1 * compute_bound_division(P[i], D[i], eb_P, eb_D);
+		double Temp = P[i] / (D[i] * R);
+		scale = tau[1]/e_T;
+		if(scale < 1){
+			new_ebs[3] = ebs[3] * scale;
+			new_ebs[4] = ebs[4] * scale;
+		}
+		// error of C
+		// double e_C = c_2*compute_bound_square_root_x(Temp, e_T);
+		// double C = c_2 * sqrt(Temp);
+		// double new_C_2 = compute_inverse_bound_square_root_x(Temp, e_V_TOT, tau[0]);
+		// // print_error("C", C, C_ori[i], e_C);
+		// double e_Mach = compute_bound_division(V_TOT, C, e_V_TOT, e_C);
+		// double Mach = V_TOT / C;
+		// // print_error("Mach", Mach, Mach_ori[i], e_Mach);
+		// // 1 + gamma/2 *Mach*Mach
+		// double e_Mach_tmp = (gamma-1) / 2 * compute_bound_x_square(Mach, e_Mach);
+		// double Mach_tmp = 1 + (gamma-1)/2 * Mach * Mach;
+		// double e_Mach_tmp_mi = 0;
+		// for(int i=1; i<=7; i++){
+		// 	e_Mach_tmp_mi += C7i[i] * pow(Mach_tmp, 7-i) * pow(e_Mach_tmp, i);
+		// }
+		// double Mach_tmp_mi = sqrt(pow(Mach_tmp, 7));
+		// double e_PT = compute_bound_multiplication(P[i], Mach_tmp_mi, eb_P, e_Mach_tmp_mi);
+		// double PT = P[i] * Mach_tmp_mi;
+		// // print_error("PT", PT, PT_ori[i], e_PT);
+		// double e_TrS_TS = c_3 * compute_bound_radical(Temp, S, e_T);
+		// double TrS_TS = c_3 / (Temp + S);
+		// double e_T_Tr_3 = 3*pow(Temp/T_r, 2)*(e_T/T_r) + 3*Temp/T_r*(e_T/T_r)*(e_T/T_r) + (e_T/T_r)*(e_T/T_r)*(e_T/T_r);
+		// double T_Tr_3 = pow(Temp/T_r, 3);
+		// double e_T_Tr_3_sqrt = compute_bound_square_root_x(T_Tr_3, e_T_Tr_3);
+		// double T_Tr_3_sqrt = sqrt(T_Tr_3);
+		// double e_mu = mu_r * compute_bound_multiplication(T_Tr_3_sqrt, TrS_TS, e_T_Tr_3_sqrt, e_TrS_TS);
+		// double mu = mu_r * T_Tr_3_sqrt * TrS_TS;	
+		for(int i=0; i<5; i++){
+			ebs[i] = new_ebs[i];
+		}	
+	}
+}
+
+template <class T>
+void compute_QoIs(const T * Vx, const T * Vy, const T * Vz, const T * P, const T * D, size_t n,
+					T * V_TOT_, T * Temp_, T * C_, T * Mach_, T * PT_, T * mu_){
+	double R = 287.1;
+	double gamma = 1.4;
+	double mi = 3.5;
+	double mu_r = 1.716e-5;
+	double T_r = 273.15;
+	double S = 110.4;
+	for(int i=0; i<n; i++){
+		double V_TOT_2 = Vx[i]*Vx[i] + Vy[i]*Vy[i] + Vz[i]*Vz[i];
+		double V_TOT = sqrt(V_TOT_2);
+		double Temp = P[i] / (D[i] * R);
+		double C = sqrt(gamma * R * Temp);
+		double Mach = V_TOT / C;
+		double Mach_tmp = 1 + (gamma-1)/2 * Mach * Mach;
+		double Mach_tmp_mi = sqrt(pow(Mach_tmp, 7));
+		double PT = P[i] * Mach_tmp_mi;
+		double TrS_TS = (T_r + S) / (Temp + S);
+		double T_Tr_3 = pow(Temp/T_r, 3);
+		double T_Tr_3_sqrt = sqrt(T_Tr_3);
+		double mu = mu_r * T_Tr_3_sqrt * TrS_TS;
+		V_TOT_[i] = V_TOT;
+		Temp_[i] = Temp;
+		C_[i] = C;
+		Mach_[i] = Mach;
+		PT_[i] = PT;
+		mu_[i] = mu;
+	}
+}
+
+template <class T>
+T compute_value_range(const std::vector<T>& vec){
+	T min = vec[0];
+	T max = vec[0];
+	for(int i=0; i<vec.size(); i++){
+		if(vec[i] < min) min = vec[i];
+		if(vec[i] > max) max = vec[i];
+	}
+	return max - min;
+}
+
+template <class T>
+void print_info(const std::string& name, const std::vector<T>& vec){
+	T max = vec[0];
+	T min = vec[0];
+	for(int i=1; i<vec.size(); i++){
+		if(max < vec[i]) max = vec[i];
+		if(min > vec[i]) min = vec[i];
+	}
+	std::cout << name << ": min value = " << min << ", max value = " << max << ", value range = " << max - min << std::endl;
+}
+
+int main(int argc, char ** argv){
+
+    using T = double;
+    int zone_id = 0;
+    std::string id_str = std::to_string(zone_id);
+    size_t num_elements = 0;
+    std::string prefix = "/Users/xliang/Dataset/GE/data/zone_";
+    P_ori = MGARD::readfile<T>((prefix + id_str + "_Pressure.dat").c_str(), num_elements);
+    D_ori = MGARD::readfile<T>((prefix + id_str + "_Density.dat").c_str(), num_elements);
+    Vx_ori = MGARD::readfile<T>((prefix + id_str + "_VelocityX.dat").c_str(), num_elements);
+    Vy_ori = MGARD::readfile<T>((prefix + id_str + "_VelocityY.dat").c_str(), num_elements);
+    Vz_ori = MGARD::readfile<T>((prefix + id_str + "_VelocityZ.dat").c_str(), num_elements);
+    double target_rel_eb = 0.01;
+    std::vector<double> ebs;
+    ebs.push_back(compute_value_range(Vx_ori));
+    ebs.push_back(compute_value_range(Vy_ori));
+    ebs.push_back(compute_value_range(Vz_ori));
+    ebs.push_back(compute_value_range(P_ori));
+    ebs.push_back(compute_value_range(D_ori));
+    for(int i=0; i<ebs.size(); i++){
+    	ebs[i] *= target_rel_eb;
+    }
+
+    std::vector<T> V_TOT(num_elements);
+    std::vector<T> Temp(num_elements);
+    std::vector<T> C(num_elements);
+    std::vector<T> Mach(num_elements);
+    std::vector<T> PT(num_elements);
+    std::vector<T> mu(num_elements);
+    compute_QoIs(Vx_ori.data(), Vy_ori.data(), Vz_ori.data(), P_ori.data(), D_ori.data(), num_elements, V_TOT.data(), Temp.data(), C.data(), Mach.data(), PT.data(), mu.data());
+    std::vector<double> tau;
+    tau.push_back(compute_value_range(V_TOT)*target_rel_eb);
+    tau.push_back(compute_value_range(Temp)*target_rel_eb);
+    tau.push_back(compute_value_range(C)*target_rel_eb);
+    tau.push_back(compute_value_range(Mach)*target_rel_eb);
+    tau.push_back(compute_value_range(PT)*target_rel_eb);
+    tau.push_back(compute_value_range(mu)*target_rel_eb);
+	V_TOT_ori = V_TOT.data();
+	Temp_ori = Temp.data();
+	C_ori = C.data();
+	Mach_ori = Mach.data();
+	PT_ori = PT.data();
+	mu_ori = mu.data();
+
+    std::string mask_file = rdata_file_prefix + "mask.bin";
+    size_t num_valid_data = 0;
+    auto mask = MGARD::readfile<unsigned char>(mask_file.c_str(), num_valid_data);
+    std::vector<MDR::ComposedReconstructor<T, MGARDHierarchicalDecomposer<T>, DirectInterleaver<T>, PerBitBPEncoder<T, uint32_t>, AdaptiveLevelCompressor, SignExcludeGreedyBasedSizeInterpreter<MaxErrorEstimatorHB<T>>, MaxErrorEstimatorHB<T>, ConcatLevelFileRetriever>> reconstructors;
+    for(int i=0; i<ebs.size(); i++){
+        // std::string rdir_prefix = rdata_file_prefix + "zone_" + id_str + "_" + varlist[i];
+        std::string rdir_prefix = rdata_file_prefix + varlist[i];
+        std::string metadata_file = rdir_prefix + "_refactored_data/metadata.bin";
+        std::vector<std::string> files;
+        int num_levels = 9;
+        for(int i=0; i<num_levels; i++){
+            std::string filename = rdir_prefix + "_refactored_data/level_" + std::to_string(i) + ".bin";
+            files.push_back(filename);
+        }
+        auto decomposer = MGARDHierarchicalDecomposer<T>();
+        auto interleaver = DirectInterleaver<T>();
+        auto encoder = PerBitBPEncoder<T, uint32_t>();
+        auto compressor = AdaptiveLevelCompressor(64);
+        auto estimator = MaxErrorEstimatorHB<T>();
+        auto interpreter = SignExcludeGreedyBasedSizeInterpreter<MaxErrorEstimatorHB<T>>(estimator);
+        auto retriever = ConcatLevelFileRetriever(metadata_file, files);
+        reconstructors.push_back(generateReconstructor<T>(decomposer, interleaver, encoder, compressor, estimator, interpreter, retriever));
+        reconstructors.back().load_metadata();
+    }    
+    std::vector<std::vector<T>> reconstructed_vars(n_vars, std::vector<double>(num_elements));
+
+    int iter = 0;
+    int max_iter = 2;
+    while(iter < max_iter){
+    	iter ++;
+	    for(int i=0; i<n_vars; i++){
+	        auto reconstructed_data = reconstructors[i].progressive_reconstruct(ebs[i], -1);
+	        if(i < 3){
+	            // reconstruct with mask
+	            int index = 0;
+	            for(int j=0; j<num_elements; j++){
+	                if(mask[j]){
+	                    reconstructed_vars[i][j] = reconstructed_data[index ++];
+	                }
+	                else reconstructed_vars[i][j] = 0;
+	            }
+	        }
+	        else{
+	            memcpy(reconstructed_vars[i].data(), reconstructed_data, num_elements*sizeof(T));
+	        }
+	    }
+
+	    Vx_dec = reconstructed_vars[0].data();
+	    Vy_dec = reconstructed_vars[1].data();
+	    Vz_dec = reconstructed_vars[2].data();
+	    P_dec = reconstructed_vars[3].data();
+	    D_dec = reconstructed_vars[4].data();
+	    MGARD::print_statistics(Vx_ori.data(), Vx_dec, num_elements);
+	    MGARD::print_statistics(Vy_ori.data(), Vy_dec, num_elements);
+	    MGARD::print_statistics(Vz_ori.data(), Vz_dec, num_elements);
+	    MGARD::print_statistics(P_ori.data(), P_dec, num_elements);
+	    MGARD::print_statistics(D_ori.data(), D_dec, num_elements);
+	    error_V_TOT = std::vector<double>(num_elements);
+	    error_Temp = std::vector<double>(num_elements);
+	    error_C = std::vector<double>(num_elements);
+	    error_Mach = std::vector<double>(num_elements);
+	    error_PT = std::vector<double>(num_elements);
+	    error_mu = std::vector<double>(num_elements);
+	    error_est_V_TOT = std::vector<double>(num_elements);
+	    error_est_Temp = std::vector<double>(num_elements);
+	    error_est_C = std::vector<double>(num_elements);
+	    error_est_Mach = std::vector<double>(num_elements);
+	    error_est_PT = std::vector<double>(num_elements);
+	    error_est_mu = std::vector<double>(num_elements);
+	    print_info(names[0], V_TOT);
+	    print_info(names[1], Temp);
+	    print_info(names[2], C);
+	    print_info(names[3], Mach);
+	    print_info(names[4], PT);
+	    print_info(names[5], mu);
+	    MDR::print_vec(ebs);
+	    estimate_error(Vx_dec, Vy_dec, Vz_dec, P_dec, D_dec, num_elements, tau, ebs);
+	    MDR::print_vec(ebs);
+	    print_info(names[0] + " error", error_V_TOT);
+	    print_info(names[0] + " error_est", error_est_V_TOT);
+	    print_info(names[1] + " error", error_Temp);
+	    print_info(names[1] + " error_est", error_est_Temp);
+	    print_info(names[2] + " error", error_C);
+	    print_info(names[2] + " error_est", error_est_C);
+	    print_info(names[3] + " error", error_Mach);
+	    print_info(names[3] + " error_est", error_est_Mach);
+	    print_info(names[4] + " error", error_PT);
+	    print_info(names[4] + " error_est", error_est_PT);
+	    print_info(names[5] + " error", error_mu);
+	    print_info(names[5] + " error_est", error_est_mu);    	
+    }
+
+    // MGARD::writefile("V_TOT.dat", V_TOT.data(), num_elements);
+    // MGARD::writefile("Temp.dat", Temp.data(), num_elements);
+    // MGARD::writefile("C.dat", C.data(), num_elements);
+    // MGARD::writefile("Mach.dat", Mach.data(), num_elements);    
+    // MGARD::writefile("PT.dat", PT.data(), num_elements);
+    // MGARD::writefile("mu.dat", mu.data(), num_elements);    
+    // MGARD::writefile("error_V_TOT.dat", error_V_TOT.data(), num_elements);
+    // MGARD::writefile("error_Temp.dat", error_Temp.data(), num_elements);
+    // MGARD::writefile("error_C.dat", error_C.data(), num_elements);
+    // MGARD::writefile("error_Mach.dat", error_Mach.data(), num_elements);    
+    // MGARD::writefile("error_PT.dat", error_PT.data(), num_elements);
+    // MGARD::writefile("error_mu.dat", error_mu.data(), num_elements);    
+    // MGARD::writefile("error_est_V_TOT.dat", error_est_V_TOT.data(), num_elements);
+    // MGARD::writefile("error_est_Temp.dat", error_est_Temp.data(), num_elements);
+    // MGARD::writefile("error_est_C.dat", error_est_C.data(), num_elements);
+    // MGARD::writefile("error_est_Mach.dat", error_est_Mach.data(), num_elements);    
+    // MGARD::writefile("error_est_PT.dat", error_est_PT.data(), num_elements);
+    // MGARD::writefile("error_est_mu.dat", error_est_mu.data(), num_elements);    
+    return 0;
+}
+
