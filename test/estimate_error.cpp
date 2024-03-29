@@ -7,19 +7,9 @@
 #include <numeric>
 #include "utils.hpp"
 #include "Reconstructor/Reconstructor.hpp"
+#include "Synthesizer4GE.hpp"
 
 using namespace MDR;
-
-template <class T, class Decomposer, class Interleaver, class Encoder, class Compressor, class ErrorEstimator, class SizeInterpreter, class Retriever>
-MDR::ComposedReconstructor<T, Decomposer, Interleaver, Encoder, Compressor, SizeInterpreter, ErrorEstimator, Retriever> generateReconstructor(Decomposer decomposer, Interleaver interleaver, Encoder encoder, Compressor compressor, ErrorEstimator estimator, SizeInterpreter interpreter, Retriever retriever){
-    auto reconstructor = MDR::ComposedReconstructor<T, Decomposer, Interleaver, Encoder, Compressor, SizeInterpreter, ErrorEstimator, Retriever>(decomposer, interleaver, encoder, compressor, interpreter, retriever);
-    return reconstructor;
-}
-
-const std::string data_file_prefix = "/Users/xliang/Dataset/GE/data/";
-const std::string rdata_file_prefix = "/Users/xliang/Dataset/GE/refactor/";
-const std::vector<std::string> varlist = {"VelocityX", "VelocityY", "VelocityZ", "Pressure", "Density"};
-const int n_vars = 5;
 
 // f(x) = x^2
 template <class T>
@@ -407,7 +397,7 @@ int main(int argc, char ** argv){
     int zone_id = 0;
     std::string id_str = std::to_string(zone_id);
     size_t num_elements = 0;
-    std::string prefix = "/Users/xliang/Dataset/GE/data/zone_";
+    std::string prefix = data_file_prefix + "zone_";
     P_ori = MGARD::readfile<T>((prefix + id_str + "_Pressure.dat").c_str(), num_elements);
     D_ori = MGARD::readfile<T>((prefix + id_str + "_Density.dat").c_str(), num_elements);
     Vx_ori = MGARD::readfile<T>((prefix + id_str + "_VelocityX.dat").c_str(), num_elements);
