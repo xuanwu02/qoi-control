@@ -119,6 +119,29 @@ void print_error(std::string varname, T dec, T ori, T est){
 	std::cout << varname << ": dec = " << dec << ", ori = " << ori << ", error = " << dec - ori << ", est = " << est << std::endl; 
 }
 
+template <class T>
+double UniformTighteningVTOT(T Vx, T Vy, T Vz, T eb_Vx, T eb_Vy, T eb_Vz, T tau){
+	// error of total velocity square
+	double e_V_TOT_2 = compute_bound_x_square(Vx, eb_Vx) + compute_bound_x_square(Vy, eb_Vy) + compute_bound_x_square(Vz, eb_Vz);
+	double V_TOT_2 = Vx*Vx + Vy*Vy + Vz*Vz;
+	// error of total velocity
+	double e_V_TOT = compute_bound_square_root_x(V_TOT_2, e_V_TOT_2);
+	double V_TOT = sqrt(V_TOT_2);
+	double new_e_V_TOT_2 = compute_inverse_bound_square_root_x(V_TOT, e_V_TOT, tau);
+	// compute assignment on Vx, Vy, Vz
+	double e1 = 2*fabs(Vx)*eb_Vx + 2*fabs(Vy)*eb_Vy + 2*fabs(Vz)*eb_Vz;
+	double e2 = eb_Vx*eb_Vx + eb_Vy*eb_Vy  + eb_Vz*eb_Vz;
+	// assuming the same scale on error bound deduction
+	double scale = (-e1 + sqrt(e1*e1 + 4*e2*new_e_V_TOT_2))/(2*e2);
+	return scale;
+}
+
+template <class T>
+double UniformTighteningT(T P, T D, T eb_P, T eb_D, T c_1, T tau){
+	double e_T = c_1 * compute_bound_division(P, D, eb_P, eb_D);
+	return tau / e_T;	
+}
+
 std::vector<double> P_ori;
 std::vector<double> D_ori;
 std::vector<double> Vx_ori;
@@ -269,18 +292,8 @@ void estimate_error(const T * Vx, const T * Vy, const T * Vz, const T * P, const
 	{
 		std::vector<double> new_ebs(5, 0);
 		int i = max_index[0];
-		// error of total velocity square
-		double e_V_TOT_2 = compute_bound_x_square(Vx[i], eb_Vx) + compute_bound_x_square(Vy[i], eb_Vy) + compute_bound_x_square(Vz[i], eb_Vz);
-		double V_TOT_2 = Vx[i]*Vx[i] + Vy[i]*Vy[i] + Vz[i]*Vz[i];
-		// error of total velocity
-		double e_V_TOT = compute_bound_square_root_x(V_TOT_2, e_V_TOT_2);
-		double V_TOT = sqrt(V_TOT_2);
-		double new_e_V_TOT_2 = compute_inverse_bound_square_root_x(V_TOT, e_V_TOT, tau[0]);
-		// compute assignment on Vx, Vy, Vz
-		double e1 = 2*fabs(Vx[i])*eb_Vx + 2*fabs(Vy[i])*eb_Vy + 2*fabs(Vz[i])*eb_Vz;
-		double e2 = eb_Vx*eb_Vx + eb_Vy*eb_Vy  + eb_Vz*eb_Vz;
 		// assuming the same scale on error bound deduction
-		double scale = (-e1 + sqrt(e1*e1 + 4*e2*new_e_V_TOT_2))/(2*e2);
+		double scale = UniformTighteningVTOT(Vx[i], Vy[i], Vz[i], eb_Vx, eb_Vy, eb_Vz, tau[0]);
 		if(scale < 1){
 			new_ebs[0] = ebs[0] * scale;
 			new_ebs[1] = ebs[1] * scale;
@@ -288,9 +301,7 @@ void estimate_error(const T * Vx, const T * Vy, const T * Vz, const T * P, const
 		}
 		// error of temperature
 		i = max_index[1];
-		double e_T = c_1 * compute_bound_division(P[i], D[i], eb_P, eb_D);
-		double Temp = P[i] / (D[i] * R);
-		scale = tau[1]/e_T;
+		scale = UniformTighteningT(P[i], D[i], eb_P, eb_D, c_1, tau[1]);
 		if(scale < 1){
 			new_ebs[3] = ebs[3] * scale;
 			new_ebs[4] = ebs[4] * scale;
@@ -381,6 +392,15 @@ void print_info(const std::string& name, const std::vector<T>& vec){
 	std::cout << name << ": min value = " << min << ", max value = " << max << ", value range = " << max - min << std::endl;
 }
 
+template <class T>
+void print_max_abs(const std::string& name, const std::vector<T>& vec){
+	T max = fabs(vec[0]);
+	for(int i=1; i<vec.size(); i++){
+		if(max < fabs(vec[i])) max = fabs(vec[i]);
+	}
+	std::cout << name << ": max absolute value = " << max << std::endl;
+}
+
 int main(int argc, char ** argv){
 
     using T = double;
@@ -411,6 +431,12 @@ int main(int argc, char ** argv){
     std::vector<T> PT(num_elements);
     std::vector<T> mu(num_elements);
     compute_QoIs(Vx_ori.data(), Vy_ori.data(), Vz_ori.data(), P_ori.data(), D_ori.data(), num_elements, V_TOT.data(), Temp.data(), C.data(), Mach.data(), PT.data(), mu.data());
+	// print_info(names[0], V_TOT);
+	// print_info(names[1], Temp);
+	// print_info(names[2], C);
+	// print_info(names[3], Mach);
+	// print_info(names[4], PT);
+	// print_info(names[5], mu);
     std::vector<double> tau;
     tau.push_back(compute_value_range(V_TOT)*target_rel_eb);
     tau.push_back(compute_value_range(Temp)*target_rel_eb);
@@ -494,27 +520,27 @@ int main(int argc, char ** argv){
 	    error_est_Mach = std::vector<double>(num_elements);
 	    error_est_PT = std::vector<double>(num_elements);
 	    error_est_mu = std::vector<double>(num_elements);
-	    print_info(names[0], V_TOT);
-	    print_info(names[1], Temp);
-	    print_info(names[2], C);
-	    print_info(names[3], Mach);
-	    print_info(names[4], PT);
-	    print_info(names[5], mu);
 	    MDR::print_vec(ebs);
 	    estimate_error(Vx_dec, Vy_dec, Vz_dec, P_dec, D_dec, num_elements, tau, ebs);
 	    MDR::print_vec(ebs);
-	    print_info(names[0] + " error", error_V_TOT);
-	    print_info(names[0] + " error_est", error_est_V_TOT);
-	    print_info(names[1] + " error", error_Temp);
-	    print_info(names[1] + " error_est", error_est_Temp);
-	    print_info(names[2] + " error", error_C);
-	    print_info(names[2] + " error_est", error_est_C);
-	    print_info(names[3] + " error", error_Mach);
-	    print_info(names[3] + " error_est", error_est_Mach);
-	    print_info(names[4] + " error", error_PT);
-	    print_info(names[4] + " error_est", error_est_PT);
-	    print_info(names[5] + " error", error_mu);
-	    print_info(names[5] + " error_est", error_est_mu);    	
+	    std::cout << names[0] << " requested error = " << tau[0] << std::endl;
+	    print_max_abs(names[0] + " error", error_V_TOT);
+	    print_max_abs(names[0] + " error_est", error_est_V_TOT);
+	    std::cout << names[1] << " requested error = " << tau[1] << std::endl;
+	    print_max_abs(names[1] + " error", error_Temp);
+	    print_max_abs(names[1] + " error_est", error_est_Temp);
+	    std::cout << names[2] << " requested error = " << tau[2] << std::endl;
+	    print_max_abs(names[2] + " error", error_C);
+	    print_max_abs(names[2] + " error_est", error_est_C);
+	    std::cout << names[3] << " requested error = " << tau[3] << std::endl;
+	    print_max_abs(names[3] + " error", error_Mach);
+	    print_max_abs(names[3] + " error_est", error_est_Mach);
+	    std::cout << names[4] << " requested error = " << tau[4] << std::endl;
+	    print_max_abs(names[4] + " error", error_PT);
+	    print_max_abs(names[4] + " error_est", error_est_PT);
+	    std::cout << names[5] << " requested error = " << tau[5] << std::endl;
+	    print_max_abs(names[5] + " error", error_mu);
+	    print_max_abs(names[5] + " error_est", error_est_mu);    	
     }
 
     // MGARD::writefile("V_TOT.dat", V_TOT.data(), num_elements);
