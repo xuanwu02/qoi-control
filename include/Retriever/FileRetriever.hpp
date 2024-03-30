@@ -30,6 +30,7 @@ namespace MDR {
                 total_retrieve_size += offsets[i];
             }
             std::cout << "Total retrieve size = " << total_retrieve_size << std::endl;
+            retrieved_size = total_retrieve_size;
             return interleave_level_components(level_sizes, prev_level_num_bitplanes, level_num_bitplanes);
         }
 
@@ -51,6 +52,10 @@ namespace MDR {
             concated_level_components.clear();
         }
 
+        size_t get_retrieved_size(){
+            return retrieved_size;
+        }
+        
         ~ConcatLevelFileRetriever(){}
 
         void print() const {
@@ -75,6 +80,7 @@ namespace MDR {
         std::string metadata_file;
         std::vector<uint32_t> offsets;
         std::vector<uint8_t*> concated_level_components;
+        size_t retrieved_size = 0;
     };
 }
 #endif

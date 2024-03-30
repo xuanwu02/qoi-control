@@ -47,7 +47,9 @@ namespace MDR {
 
         void write_metadata() const {
             uint32_t metadata_size = sizeof(uint8_t) + get_size(dimensions) // dimensions
-                            + sizeof(uint8_t) + get_size(level_error_bounds) + get_size(level_squared_errors) + get_size(level_sizes) // level information
+                            + sizeof(uint8_t) + get_size(level_error_bounds) 
+                            // + get_size(level_squared_errors) 
+                            + get_size(level_sizes) // level information
                             + get_size(stopping_indices) + get_size(level_num) + 1; // one byte for whether negabinary encoding is used 
             uint8_t * metadata = (uint8_t *) malloc(metadata_size);
             uint8_t * metadata_pos = metadata;
@@ -55,7 +57,7 @@ namespace MDR {
             serialize(dimensions, metadata_pos);
             *(metadata_pos ++) = (uint8_t) level_error_bounds.size();
             serialize(level_error_bounds, metadata_pos);
-            serialize(level_squared_errors, metadata_pos);
+            // serialize(level_squared_errors, metadata_pos);
             serialize(level_sizes, metadata_pos);
             serialize(stopping_indices, metadata_pos);
             serialize(level_num, metadata_pos);
@@ -118,10 +120,10 @@ namespace MDR {
                 int level_exp = 0;
                 frexp(level_max_error, &level_exp);
                 std::vector<uint32_t> stream_sizes;
-                std::vector<double> level_sq_err;
-                auto streams = encoder.encode(buffer, level_elements[i], level_exp, num_bitplanes, stream_sizes, level_sq_err);
+                // std::vector<double> level_sq_err;
+                auto streams = encoder.encode(buffer, level_elements[i], level_exp, num_bitplanes, stream_sizes);
                 free(buffer);
-                level_squared_errors.push_back(level_sq_err);
+                // level_squared_errors.push_back(level_sq_err);
                 // timer.end();
                 // timer.print("Encoding");
                 // timer.start();

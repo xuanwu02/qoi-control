@@ -34,7 +34,7 @@ namespace MDR {
                 std::cout << "ErrorEstimator is base of MaxErrorEstimator, computing absolute error" << std::endl;
                 MaxErrorCollector<T> collector = MaxErrorCollector<T>();
                 for(int i=0; i<=target_level; i++){
-                    auto collected_error = collector.collect_level_error(NULL, 0, level_squared_errors[i].size(), level_error_bounds[i]);
+                    auto collected_error = collector.collect_level_error(NULL, 0, level_sizes[i].size(), level_error_bounds[i]);
                     level_abs_errors.push_back(collected_error);
                 }
                 level_errors = level_abs_errors;
@@ -137,7 +137,7 @@ namespace MDR {
             deserialize(metadata_pos, num_dims, dimensions);
             uint8_t num_levels = *(metadata_pos ++);
             deserialize(metadata_pos, num_levels, level_error_bounds);
-            deserialize(metadata_pos, num_levels, level_squared_errors);
+            // deserialize(metadata_pos, num_levels, level_squared_errors);
             deserialize(metadata_pos, num_levels, level_sizes);
             deserialize(metadata_pos, num_levels, stopping_indices);
             deserialize(metadata_pos, num_levels, level_num);
@@ -163,6 +163,10 @@ namespace MDR {
 
         int get_reconstruct_level(){
             return current_level;
+        }
+
+        size_t get_retrieved_size(){
+            return retriever.get_retrieved_size();
         }
 
         ~ComposedReconstructor(){}
