@@ -43,7 +43,7 @@ std::vector<double> error_est_mu;
 
 
 template<class T>
-bool halfing_error_V_TOT(const T * Vx, const T * Vy, const T * Vz, size_t n, const std::vector<unsigned char>& mask, const double tau, std::vector<double>& ebs){
+bool halfing_error_V_TOT_uniform(const T * Vx, const T * Vy, const T * Vz, size_t n, const std::vector<unsigned char>& mask, const double tau, std::vector<double>& ebs){
 	double eb_Vx = ebs[0];
 	double eb_Vy = ebs[1];
 	double eb_Vz = ebs[2];
@@ -75,23 +75,119 @@ bool halfing_error_V_TOT(const T * Vx, const T * Vy, const T * Vz, size_t n, con
 	std::cout << names[0] << ": max estimated error = " << max_value << ", index = " << max_index << std::endl;
 	// estimate error bound based on maximal errors
 	if(max_value > tau){
-		std::cout << "comparing: " << max_value << " " << tau << std::endl;
+		// estimate
+		auto i = max_index;
+		double estimate_error = max_value;
+		double V_TOT_2 = Vx[i]*Vx[i] + Vy[i]*Vy[i] + Vz[i]*Vz[i];
+		double V_TOT = sqrt(V_TOT_2);
+		double eb_Vx = ebs[0];
+		double eb_Vy = ebs[1];
+		double eb_Vz = ebs[2];
+		while(estimate_error > tau){
+			// change error bound
+    		std::cout << "uniform decrease\n";
+			eb_Vx = eb_Vx / 1.5;
+			eb_Vy = eb_Vy / 1.5;
+			eb_Vz = eb_Vz / 1.5; 							        		
+			double e_V_TOT_2 = compute_bound_x_square(Vx[i], eb_Vx) + compute_bound_x_square(Vy[i], eb_Vy) + compute_bound_x_square(Vz[i], eb_Vz);
+			// double e_V_TOT = compute_bound_square_root_x(V_TOT_2, e_V_TOT_2);
+			estimate_error = compute_bound_square_root_x(V_TOT_2, e_V_TOT_2);
+		}
+		ebs[0] = eb_Vx;
+		ebs[1] = eb_Vy;
+		ebs[2] = eb_Vz;
+		return false;
+	}
+	return true;
+}
+
+template <class T>
+inline void normalize_coefficient(T& coeff_0, T& coeff_1, T& coeff_2){
+	double min_val = std::min(coeff_0, coeff_1);
+	min_val = std::min(min_val, coeff_2);
+	coeff_0 /= min_val;
+	coeff_1 /= min_val;
+	coeff_2 /= min_val;
+	if(coeff_0 + coeff_1 + coeff_0 == 3){
+		coeff_0 = 1.5;
+		coeff_1 = 1.5;
+		coeff_2 = 1.5;
+	}
+}
+
+template <class T>
+bool halfing_error_V_TOT_adaptive(const T * Vx, const T * Vy, const T * Vz, size_t n, const std::vector<unsigned char>& mask, const double tau, std::vector<double>& ebs){
+	double eb_Vx = ebs[0];
+	double eb_Vy = ebs[1];
+	double eb_Vz = ebs[2];
+	double max_value = 0;
+	int max_index = 0;
+	for(int i=0; i<n; i++){
+		// error of total velocity square
+		double e_V_TOT_2 = compute_bound_x_square(Vx[i], eb_Vx) + compute_bound_x_square(Vy[i], eb_Vy) + compute_bound_x_square(Vz[i], eb_Vz);
+		double V_TOT_2 = Vx[i]*Vx[i] + Vy[i]*Vy[i] + Vz[i]*Vz[i];
+		// error of total velocity
+		double e_V_TOT = compute_bound_square_root_x(V_TOT_2, e_V_TOT_2);
+		double V_TOT = sqrt(V_TOT_2);
+		// print_error("V_TOT", V_TOT, V_TOT_ori[i], e_V_TOT);
+
+		error_est_V_TOT[i] = e_V_TOT;
+		error_V_TOT[i] = V_TOT - V_TOT_ori[i];
+
+		if(max_value < error_est_V_TOT[i]){
+			max_value = error_est_V_TOT[i];
+			max_index = i;
+		}
+
+	}
+	std::cout << "Vx = " << Vx[max_index] << " Vy = " << Vy[max_index] << " Vz = " << Vz[max_index] << std::endl;
+	std::cout << "eb_Vx = " << eb_Vx << " eb_Vy = " << eb_Vy << " eb_Vz = " << eb_Vz << std::endl;
+	std::cout << "coeff_x = " << fabs(Vx[max_index])*eb_Vx << " coeff_y = " << fabs(Vy[max_index])*eb_Vy <<  " coeff_z = " << fabs(Vz[max_index])*eb_Vz << std::endl;
+	std::cout << names[0] << ": max estimated error = " << max_value << ", index = " << max_index << std::endl;
+	// estimate error bound based on maximal errors
+	if(max_value > tau){
 		std::vector<double> new_ebs(3, 0);
 		// error of Vtotal
         {
-			new_ebs[0] = ebs[0] / 2;
-			new_ebs[1] = ebs[1] / 2;
-			new_ebs[2] = ebs[2] / 2;            
-			// double coeff_0 = fabs(Vy[max_index])*eb_Vy * fabs(Vz[max_index])*eb_Vz;
-			// double coeff_1 = fabs(Vx[max_index])*eb_Vx * fabs(Vz[max_index])*eb_Vz;
-			// double coeff_2 = fabs(Vx[max_index])*eb_Vx * fabs(Vy[max_index])*eb_Vy;
-			// double coeff_0 = fabs(Vx[max_index])*eb_Vx;
-			// double coeff_1 = fabs(Vy[max_index])*eb_Vy;
-			// double coeff_2 = fabs(Vz[max_index])*eb_Vz;
-			// double average = (coeff_0 + coeff_1 + coeff_2)/3;
-			// new_ebs[0] = ebs[0] / coeff_0 * average / 2;
-			// new_ebs[1] = ebs[1] / coeff_1 * average / 2;
-			// new_ebs[2] = ebs[2] / coeff_2 * average / 2;            
+        	bool uniform = false;
+        	if(eb_Vx*eb_Vx + eb_Vy*eb_Vy + eb_Vz*eb_Vz > 2*(fabs(Vx[max_index])*eb_Vx + fabs(Vy[max_index])*eb_Vy + fabs(Vz[max_index])*eb_Vz)){
+        		uniform = true;
+        	}
+			// estimate
+			auto i = max_index;
+			double estimate_error = max_value;
+			double V_TOT_2 = Vx[i]*Vx[i] + Vy[i]*Vy[i] + Vz[i]*Vz[i];
+			double V_TOT = sqrt(V_TOT_2);
+			double eb_Vx = ebs[0];
+			double eb_Vy = ebs[1];
+			double eb_Vz = ebs[2];
+			while(estimate_error > tau){
+				// change error bound
+				if(uniform){
+	        		std::cout << "uniform decrease\n";
+					eb_Vx = eb_Vx / 1.5;
+					eb_Vy = eb_Vy / 1.5;
+					eb_Vz = eb_Vz / 1.5; 							        		
+				}
+				else{
+	        		std::cout << "non-uniform decrease\n";
+					double coeff_0 = 2*fabs(Vx[i])*eb_Vx;
+					double coeff_1 = 2*fabs(Vy[i])*eb_Vy;
+					double coeff_2 = 2*fabs(Vz[i])*eb_Vz;
+					normalize_coefficient(coeff_0, coeff_1, coeff_2);
+					eb_Vx = eb_Vx / coeff_0;
+					eb_Vy = eb_Vy / coeff_1;
+					eb_Vz = eb_Vz / coeff_2; 						
+				}
+				std::cout << "eb: " << eb_Vx << " " <<  eb_Vy << " " << eb_Vz << std::endl;
+				double e_V_TOT_2 = compute_bound_x_square(Vx[i], eb_Vx) + compute_bound_x_square(Vy[i], eb_Vy) + compute_bound_x_square(Vz[i], eb_Vz);
+				// double e_V_TOT = compute_bound_square_root_x(V_TOT_2, e_V_TOT_2);
+				estimate_error = compute_bound_square_root_x(V_TOT_2, e_V_TOT_2);
+				std::cout << "error = " << estimate_error << ", tau = " << tau << std::endl;
+			}
+			new_ebs[0] = eb_Vx;
+			new_ebs[1] = eb_Vy;
+			new_ebs[2] = eb_Vz;
         }
 		for(int i=0; i<3; i++){
 			ebs[i] = new_ebs[i];
@@ -100,8 +196,6 @@ bool halfing_error_V_TOT(const T * Vx, const T * Vy, const T * Vz, size_t n, con
 	}
 	return true;
 }
-
-
 
 int main(int argc, char ** argv){
 
@@ -206,7 +300,7 @@ int main(int argc, char ** argv){
 	    error_est_V_TOT = std::vector<double>(num_elements);
 		std::cout << "iter" << iter << ": The old ebs are:" << std::endl;
 	    MDR::print_vec(ebs);
-	    tolerance_met = halfing_error_V_TOT(Vx_dec, Vy_dec, Vz_dec, num_elements, mask, tau[0], ebs);
+	    tolerance_met = halfing_error_V_TOT_uniform(Vx_dec, Vy_dec, Vz_dec, num_elements, mask, tau[0], ebs);
 		std::cout << "iter" << iter << ": The new ebs are:" << std::endl;
 	    MDR::print_vec(ebs);
 	    std::cout << names[0] << " requested error = " << tau[0] << std::endl;
