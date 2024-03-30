@@ -41,7 +41,8 @@ inline double compute_bound_square_root_x(T x, T eb){
 template <class T>
 inline double compute_inverse_bound_square_root_x(T x, T eb, T tau){
 	if(x == 0){
-		return tau * tau;
+		std::cout << "Warning: cannot control error in x^2\n";
+		return 0;				
 	}
 	if(x > eb){
 		return tau * (sqrt(x - eb) + sqrt(x));
@@ -202,7 +203,7 @@ const std::vector<std::string> names{"V_TOT", "T", "C", "Mach", "PT", "mu"};
 // estimate error from decompressed data and error bound
 // return next eb
 template <class T>
-void estimate_error(const T * Vx, const T * Vy, const T * Vz, const T * P, const T * D, size_t n, const std::vector<double>& tau, std::vector<double>& ebs){
+void estimate_error(const T * Vx, const T * Vy, const T * Vz, const T * P, const T * D, size_t n, const std::vector<unsigned char>& mask, const std::vector<double>& tau, std::vector<double>& ebs){
 
 	double eb_Vx = ebs[0];
 	double eb_Vy = ebs[1];
@@ -223,10 +224,12 @@ void estimate_error(const T * Vx, const T * Vy, const T * Vz, const T * P, const
 	std::vector<int> max_index(6);
 	for(int i=0; i<n; i++){
 		// error of total velocity square
-		double e_V_TOT_2 = compute_bound_x_square(Vx[i], eb_Vx) + compute_bound_x_square(Vy[i], eb_Vy) + compute_bound_x_square(Vz[i], eb_Vz);
+		double e_V_TOT_2 = 0;
+		if(mask[i]) e_V_TOT_2 = compute_bound_x_square(Vx[i], eb_Vx) + compute_bound_x_square(Vy[i], eb_Vy) + compute_bound_x_square(Vz[i], eb_Vz);
 		double V_TOT_2 = Vx[i]*Vx[i] + Vy[i]*Vy[i] + Vz[i]*Vz[i];
 		// error of total velocity
-		double e_V_TOT = compute_bound_square_root_x(V_TOT_2, e_V_TOT_2);
+		double e_V_TOT = 0;
+		if(mask[i]) e_V_TOT = compute_bound_square_root_x(V_TOT_2, e_V_TOT_2);
 		double V_TOT = sqrt(V_TOT_2);
 		// print_error("V_TOT", V_TOT, V_TOT_ori[i], e_V_TOT);
 		// error of temperature
@@ -433,7 +436,7 @@ int main(int argc, char ** argv){
     Vx_ori = MGARD::readfile<T>((prefix + id_str + "_VelocityX.dat").c_str(), num_elements);
     Vy_ori = MGARD::readfile<T>((prefix + id_str + "_VelocityY.dat").c_str(), num_elements);
     Vz_ori = MGARD::readfile<T>((prefix + id_str + "_VelocityZ.dat").c_str(), num_elements);
-    double target_rel_eb = 0.01;
+    double target_rel_eb = 0.1;
     std::vector<double> ebs;
     ebs.push_back(compute_value_range(Vx_ori));
     ebs.push_back(compute_value_range(Vy_ori));
@@ -541,7 +544,7 @@ int main(int argc, char ** argv){
 	    error_est_PT = std::vector<double>(num_elements);
 	    error_est_mu = std::vector<double>(num_elements);
 	    MDR::print_vec(ebs);
-	    estimate_error(Vx_dec, Vy_dec, Vz_dec, P_dec, D_dec, num_elements, tau, ebs);
+	    estimate_error(Vx_dec, Vy_dec, Vz_dec, P_dec, D_dec, num_elements, mask, tau, ebs);
 	    MDR::print_vec(ebs);
 	    std::cout << names[0] << " requested error = " << tau[0] << std::endl;
 	    print_max_abs(names[0] + " error", error_V_TOT);
