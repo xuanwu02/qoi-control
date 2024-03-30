@@ -132,6 +132,44 @@ double UniformTighteningT(T P, T D, T eb_P, T eb_D, T c_1, T tau){
 	return tau / e_T;	
 }
 
+template <class T>
+double UniformTighteningC(T P, T D, T eb_P, T eb_D, T c_1, T c_2, T tau){
+	double e_T = c_1 * compute_bound_division(P, D, eb_P, eb_D);
+	double Temp = P / D * c_1;
+	double new_e_T = compute_inverse_bound_square_root_x(Temp, e_T, tau/c_2);
+	return UniformTighteningT(P, D, eb_P, eb_D, c_1, new_e_T);
+}
+
+template <class T>
+double UniformTighteningMach(T Vx, T Vy, T Vz, T P, T D, T eb_Vx, T eb_Vy, T eb_Vz, T eb_P, T eb_D, T c_1, T c_2, T tau){
+	// error of total velocity square
+	double e_V_TOT_2 = compute_bound_x_square(Vx, eb_Vx) + compute_bound_x_square(Vy, eb_Vy) + compute_bound_x_square(Vz, eb_Vz);
+	double V_TOT_2 = Vx*Vx + Vy*Vy + Vz*Vz;
+	// error of total velocity
+	double e_V_TOT = compute_bound_square_root_x(V_TOT_2, e_V_TOT_2);
+	double V_TOT = sqrt(V_TOT_2);
+	// error of temperature
+	double e_T = c_1 * compute_bound_division(P, D, eb_P, eb_D);
+	double Temp =c_1 * P / D;
+	// error of C
+	double e_C = c_2*compute_bound_square_root_x(Temp, e_T);
+	double C = c_2 * sqrt(Temp);
+	// C > 0
+	// new_e_T = k * e_T
+	// new_e_C = k * e_C
+	// new_e_V_TOT_2 = k*(2|x|e_x+2|y|e_y+2|z|e_z) + k^2(e_x^2+e_y^2+e_z^2)
+	// new_e_V_TOT = new_e_V_TOT_2 / (sqrt(V_TOT_2) + sqrt(max(V_TOT_2 - e_V_TOT_2, 0)))
+	// |V_TOT|new_e_C + |C|new_e_V_TOT < tau * C(C - e_C) 
+	double e_Mach = compute_bound_division(V_TOT, C, e_V_TOT, e_C);
+	double tmp = V_TOT_2 - e_V_TOT_2;
+	if(tmp < 0) tmp = 0;
+	double denominator = V_TOT + sqrt(tmp);
+	double a = (eb_Vx*eb_Vx + eb_Vy*eb_Vy + eb_Vz*eb_Vz) * C / denominator;
+	double b = V_TOT * e_C + 2*(fabs(Vx)*eb_Vx + fabs(Vy)*eb_Vy + fabs(Vz)*eb_Vz) * C / denominator;
+	double c = - tau * C * (C - e_C);
+	return (sqrt(b*b - 4*a*c) - b)/(2*a);
+}
+
 std::vector<double> P_ori;
 std::vector<double> D_ori;
 std::vector<double> Vx_ori;
@@ -284,6 +322,7 @@ void estimate_error(const T * Vx, const T * Vy, const T * Vz, const T * P, const
 		int i = max_index[0];
 		// assuming the same scale on error bound deduction
 		double scale = UniformTighteningVTOT(Vx[i], Vy[i], Vz[i], eb_Vx, eb_Vy, eb_Vz, tau[0]);
+		std::cout << "V_TOT scale = " << scale << std::endl;
 		if(scale < 1){
 			new_ebs[0] = ebs[0] * scale;
 			new_ebs[1] = ebs[1] * scale;
@@ -292,37 +331,28 @@ void estimate_error(const T * Vx, const T * Vy, const T * Vz, const T * P, const
 		// error of temperature
 		i = max_index[1];
 		scale = UniformTighteningT(P[i], D[i], eb_P, eb_D, c_1, tau[1]);
+		std::cout << "T scale = " << scale << std::endl;
 		if(scale < 1){
 			new_ebs[3] = ebs[3] * scale;
 			new_ebs[4] = ebs[4] * scale;
 		}
 		// error of C
-		// double e_C = c_2*compute_bound_square_root_x(Temp, e_T);
-		// double C = c_2 * sqrt(Temp);
-		// double new_C_2 = compute_inverse_bound_square_root_x(Temp, e_V_TOT, tau[0]);
-		// // print_error("C", C, C_ori[i], e_C);
-		// double e_Mach = compute_bound_division(V_TOT, C, e_V_TOT, e_C);
-		// double Mach = V_TOT / C;
-		// // print_error("Mach", Mach, Mach_ori[i], e_Mach);
-		// // 1 + gamma/2 *Mach*Mach
-		// double e_Mach_tmp = (gamma-1) / 2 * compute_bound_x_square(Mach, e_Mach);
-		// double Mach_tmp = 1 + (gamma-1)/2 * Mach * Mach;
-		// double e_Mach_tmp_mi = 0;
-		// for(int i=1; i<=7; i++){
-		// 	e_Mach_tmp_mi += C7i[i] * pow(Mach_tmp, 7-i) * pow(e_Mach_tmp, i);
-		// }
-		// double Mach_tmp_mi = sqrt(pow(Mach_tmp, 7));
-		// double e_PT = compute_bound_multiplication(P[i], Mach_tmp_mi, eb_P, e_Mach_tmp_mi);
-		// double PT = P[i] * Mach_tmp_mi;
-		// // print_error("PT", PT, PT_ori[i], e_PT);
-		// double e_TrS_TS = c_3 * compute_bound_radical(Temp, S, e_T);
-		// double TrS_TS = c_3 / (Temp + S);
-		// double e_T_Tr_3 = 3*pow(Temp/T_r, 2)*(e_T/T_r) + 3*Temp/T_r*(e_T/T_r)*(e_T/T_r) + (e_T/T_r)*(e_T/T_r)*(e_T/T_r);
-		// double T_Tr_3 = pow(Temp/T_r, 3);
-		// double e_T_Tr_3_sqrt = compute_bound_square_root_x(T_Tr_3, e_T_Tr_3);
-		// double T_Tr_3_sqrt = sqrt(T_Tr_3);
-		// double e_mu = mu_r * compute_bound_multiplication(T_Tr_3_sqrt, TrS_TS, e_T_Tr_3_sqrt, e_TrS_TS);
-		// double mu = mu_r * T_Tr_3_sqrt * TrS_TS;	
+		i = max_index[2];
+		scale = UniformTighteningC(P[i], D[i], eb_P, eb_D, c_1, c_2, tau[2]);
+		std::cout << "C scale = " << scale << std::endl;
+		if(scale < 1){
+			if(new_ebs[3] > ebs[3] * scale) new_ebs[3] = ebs[3] * scale;
+			if(new_ebs[4] > ebs[4] * scale) new_ebs[4] = ebs[4] * scale;
+		}
+		i = max_index[3];
+		scale = UniformTighteningMach(Vx[i], Vy[i], Vz[i], P[i], D[i], eb_Vx, eb_Vy, eb_Vz, eb_P, eb_D, c_1, c_2, tau[3]);
+		std::cout << "Mach scale = " << scale << std::endl;
+		if(scale < 1){
+			for(int i=0; i<5; i++){
+				if(new_ebs[i] > ebs[i] * scale) new_ebs[i] = ebs[i] * scale;
+			}
+		}
+
 		for(int i=0; i<5; i++){
 			ebs[i] = new_ebs[i];
 		}	
