@@ -21,11 +21,15 @@ int main(int argc, char** argv){
     }
     if(refactor){
         std::cout << "start refactoring\n";
-        MDR::refactor_singleZone<T>(id);
+        // MDR::refactor_singleZone<T>(id);
+        // MDR::refactor_singleZone_SZ3<T>(id);
+        MDR::refactor_singleZone_SZ3_delta<T>(id);
     }
     else{
         std::cout << "start recontructing\n";
-        MDR::test_singleZone<T>(id);
+        // MDR::test_singleZone<T>(id);
+        // MDR::test_singleZone_SZ3<T>(id);
+        MDR::test_singleZone_SZ3_delta<T>(id);
     }
 
     return 0;
