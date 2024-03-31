@@ -43,7 +43,7 @@ std::vector<double> error_est_mu;
 
 
 template<class T>
-bool halfing_error_T(const T * P, const T * D, size_t n, const double tau, std::vector<double>& ebs){
+bool halfing_error_T_uniform(const T * P, const T * D, size_t n, const double tau, std::vector<double>& ebs){
 	double eb_P = ebs[0];
 	double eb_D = ebs[1];
 	double R = 287.1;
@@ -72,18 +72,76 @@ bool halfing_error_T(const T * P, const T * D, size_t n, const double tau, std::
 	if(max_value > tau){
 		std::vector<double> new_ebs(2, 0);
 		// error of temperature
-		reset_PD = true;
-		new_ebs[0] = ebs[0] / 2;
-		new_ebs[1] = ebs[1] / 2;
-		for(int i=0; i<2; i++){
-			ebs[i] = new_ebs[i];
+		auto i = max_index;
+		double estimate_error = max_value;
+		double eb_P = ebs[0];
+		double eb_D = ebs[1];
+		while(estimate_error > tau){
+			// change error bound
+    		std::cout << "uniform decrease\n";
+			eb_P = eb_P / 1.5;
+			eb_D = eb_D / 1.5;
+			// double e_T = c_1 * compute_bound_division(P[i], D[i], eb_P, eb_D);
+			estimate_error = c_1 * compute_bound_division(P[i], D[i], eb_P, eb_D);
 		}
+		ebs[0] = eb_P;
+		ebs[1] = eb_D;
 		return false;
 	}
 	return true;
 }
 
+template<class T>
+bool halfing_error_T_adaptive(const T * P, const T * D, size_t n, const double tau, std::vector<double>& ebs){
+	double eb_P = ebs[0];
+	double eb_D = ebs[1];
+	double R = 287.1;
+	double c_1 = 1.0 / R;
+	double max_value = 0;;
+	int max_index = 0;
+	for(int i=0; i<n; i++){
+		// error of temperature
+		double e_T = c_1 * compute_bound_division(P[i], D[i], eb_P, eb_D);
+		double Temp = P[i] / (D[i] * R);
+		// print_error("T", Temp, Temp_ori[i], e_T);
 
+		error_est_Temp[i] = e_T;
+		error_Temp[i] = Temp - Temp_ori[i];
+
+		if(max_value < error_est_Temp[i]){
+			max_value = error_est_Temp[i];
+			max_index = i;
+		}
+
+	}
+	std::cout << names[1] << ": max estimated error = " << max_value << ", index = " << max_index << std::endl;
+
+    bool reset_PD = false, reset_Va = false;
+	// estimate error bound based on maximal errors
+	if(max_value > tau){
+		std::vector<double> new_ebs(2, 0);
+		// error of temperature
+		auto i = max_index;
+		double estimate_error = max_value;
+		double eb_P = ebs[0];
+		double eb_D = ebs[1];
+		while(estimate_error > tau){
+			// change error bound
+    		std::cout << "non-uniform decrease\n";
+			double coeff_0 = fabs(D[i])*eb_P;
+			double coeff_1 = fabs(P[i])*eb_D;
+			normalize_coefficient(coeff_0, coeff_1);
+			eb_P = eb_P / coeff_0;
+			eb_D = eb_D / coeff_1;
+			// double e_T = c_1 * compute_bound_division(P[i], D[i], eb_P, eb_D);
+			estimate_error = c_1 * compute_bound_division(P[i], D[i], eb_P, eb_D);
+		}
+		ebs[0] = eb_P;
+		ebs[1] = eb_D;
+		return false;
+	}
+	return true;
+}
 
 int main(int argc, char ** argv){
 
@@ -97,7 +155,7 @@ int main(int argc, char ** argv){
     Vx_ori = MGARD::readfile<T>((prefix + id_str + "_VelocityX.dat").c_str(), num_elements);
     Vy_ori = MGARD::readfile<T>((prefix + id_str + "_VelocityY.dat").c_str(), num_elements);
     Vz_ori = MGARD::readfile<T>((prefix + id_str + "_VelocityZ.dat").c_str(), num_elements);
-    double target_rel_eb = 0.01;
+    double target_rel_eb = atof(argv[1]);
     std::vector<double> ebs;
     ebs.push_back(compute_value_range(P_ori));
     ebs.push_back(compute_value_range(D_ori));
@@ -174,7 +232,7 @@ int main(int argc, char ** argv){
 	    error_est_Temp = std::vector<double>(num_elements);
 		std::cout << "iter" << iter << ": The old ebs are:" << std::endl;
 	    MDR::print_vec(ebs);
-	    tolerance_met = halfing_error_T(P_dec, D_dec, num_elements, tau[1], ebs);
+	    tolerance_met = halfing_error_T_uniform(P_dec, D_dec, num_elements, tau[1], ebs);
 		std::cout << "iter" << iter << ": The new ebs are:" << std::endl;
 	    MDR::print_vec(ebs);
 	    std::cout << names[1] << " requested error = " << tau[1] << std::endl;

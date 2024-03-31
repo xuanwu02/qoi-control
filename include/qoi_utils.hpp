@@ -228,6 +228,16 @@ void print_max_abs(const std::string& name, const std::vector<T>& vec){
 	std::cout << name << ": max absolute value = " << max << std::endl;
 }
 
+template <class T>
+inline void normalize_coefficient(T& coeff_0, T& coeff_1){
+	double min_val = std::min(coeff_0, coeff_1);
+	coeff_0 /= min_val;
+	coeff_1 /= min_val;
+	if(coeff_0 + coeff_1 == 2){
+		coeff_0 = 1.5;
+		coeff_1 = 1.5;
+	}
+}
 
 // template <class T>
 // void estimate_error_T(const T * P, const T * D, size_t n, const double tau, std::vector<double>& ebs){
