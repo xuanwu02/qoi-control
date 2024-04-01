@@ -131,10 +131,10 @@ namespace MDR {
                     double error_gain = error_estimator.estimate_error_gain(accumulated_error, level_errors[i][index[i]], level_errors[i][index[i] + 1], i);
                     heap.push(UnitErrorGain(error_gain / level_sizes[i][index[i]], i));
                 }
-                std::cout << i;
+                // std::cout << i;
             }
             std::cout << std::endl;
-            std::cout << "Requested tolerance = " << tolerance << ", estimated error = " << accumulated_error << std::endl;
+            // std::cout << "Requested tolerance = " << tolerance << ", estimated error = " << accumulated_error << std::endl;
             return retrieve_sizes;
         }
         void print() const {

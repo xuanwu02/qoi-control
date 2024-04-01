@@ -17,7 +17,7 @@ namespace MDR {
             release();
             uint32_t total_retrieve_size = 0;
             for(int i=0; i<retrieve_sizes.size(); i++){
-                std::cout << "Retrieve " << +level_num_bitplanes[i] << " (" << +(level_num_bitplanes[i] - prev_level_num_bitplanes[i]) << " more) bitplanes from level " << i << std::endl;
+                // std::cout << "Retrieve " << +level_num_bitplanes[i] << " (" << +(level_num_bitplanes[i] - prev_level_num_bitplanes[i]) << " more) bitplanes from level " << i << std::endl;
                 FILE * file = fopen(level_files[i].c_str(), "r");
                 if(fseek(file, offsets[i], SEEK_SET)){
                     std::cerr << "Errors in fseek while retrieving from file" << std::endl;
@@ -29,7 +29,7 @@ namespace MDR {
                 offsets[i] += retrieve_sizes[i];
                 total_retrieve_size += offsets[i];
             }
-            std::cout << "Total retrieve size = " << total_retrieve_size << std::endl;
+            // std::cout << "Total retrieve size = " << total_retrieve_size << std::endl;
             retrieved_size = total_retrieve_size;
             return interleave_level_components(level_sizes, prev_level_num_bitplanes, level_num_bitplanes);
         }
@@ -56,6 +56,10 @@ namespace MDR {
             return retrieved_size;
         }
         
+        std::vector<uint32_t> get_offsets(){
+            return offsets;
+        }
+
         ~ConcatLevelFileRetriever(){}
 
         void print() const {

@@ -31,7 +31,7 @@ namespace MDR {
             uint8_t target_level = level_error_bounds.size() - 1;
             std::vector<std::vector<double>>& level_errors = level_squared_errors;
             if(std::is_base_of<MaxErrorEstimator<T>, ErrorEstimator>::value){
-                std::cout << "ErrorEstimator is base of MaxErrorEstimator, computing absolute error" << std::endl;
+                // std::cout << "ErrorEstimator is base of MaxErrorEstimator, computing absolute error" << std::endl;
                 MaxErrorCollector<T> collector = MaxErrorCollector<T>();
                 for(int i=0; i<=target_level; i++){
                     auto collected_error = collector.collect_level_error(NULL, 0, level_sizes[i].size(), level_error_bounds[i]);
@@ -208,7 +208,7 @@ namespace MDR {
             // decompose data to current level
             if(current_level >= 0){
                 if(current_level) decomposer.recompose(data.data(), current_dimensions, current_level, this->strides);
-                std::cout << "update data\n";
+                // std::cout << "update data\n";
                 // update data with strides
                 if(current_dimensions.size() == 1){
                     for(int i=0; i<current_dimensions[0]; i++){
@@ -229,7 +229,7 @@ namespace MDR {
                     exit(-1);
                 }
             }
-            std::cout << "decompose to target_level\n";
+            // std::cout << "decompose to target_level\n";
             // decompose data to target level
             for(int i=current_level+1; i<=target_level; i++){
                 compressor.decompress_level(level_components[i], level_sizes[i], prev_level_num_bitplanes[i], level_num_bitplanes[i] - prev_level_num_bitplanes[i], stopping_indices[i]);
