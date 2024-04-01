@@ -169,6 +169,10 @@ namespace MDR {
             return retriever.get_retrieved_size();
         }
 
+        std::vector<uint32_t> get_offsets(){
+            return retriever.get_offsets();
+        }
+
         ~ComposedReconstructor(){}
 
         void print() const {
