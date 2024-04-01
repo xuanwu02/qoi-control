@@ -100,7 +100,7 @@ namespace MDR {
                     accumulated_error -= error_estimator.estimate_error(level_errors[i][index[i]], i);
                     accumulated_error += error_estimator.estimate_error(level_errors[i][index[i] + 1], i);
                     index[i] ++;
-                    std::cout << i;
+                    // std::cout << i;
                 }
                 // push the next one
                 if(index[i] != level_sizes[i].size()){
