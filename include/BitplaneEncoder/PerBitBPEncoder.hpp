@@ -320,7 +320,7 @@ namespace MDR {
                         sign = signs[i + j];
                         for(int k=num_bitplanes - 1; k>=0; k--){
                             uint8_t index = num_bitplanes - 1 - k;
-                            uint8_t bit = decoders[index].decode();
+                            T_fp bit = decoders[index].decode();
                             fp_data += bit << k;
                         }
                     }
@@ -329,7 +329,7 @@ namespace MDR {
                         bool first_bit = true;
                         for(int k=num_bitplanes - 1; k>=0; k--){
                             uint8_t index = num_bitplanes - 1 - k;
-                            uint8_t bit = decoders[index].decode();
+                            T_fp bit = decoders[index].decode();
                             fp_data += bit << k;
                             if(bit && first_bit){
                                 // decode sign
@@ -356,7 +356,7 @@ namespace MDR {
                         sign = signs[n - rest_size + j];
                         for(int k=num_bitplanes - 1; k>=0; k--){
                             uint8_t index = num_bitplanes - 1 - k;
-                            uint8_t bit = decoders[index].decode();
+                            T_fp bit = decoders[index].decode();
                             fp_data += bit << k;
                         }
                     }
@@ -364,7 +364,7 @@ namespace MDR {
                         bool first_bit = true;
                         for(int k=num_bitplanes - 1; k>=0; k--){
                             uint8_t index = num_bitplanes - 1 - k;
-                            uint8_t bit = decoders[index].decode();
+                            T_fp bit = decoders[index].decode();
                             fp_data += bit << k;
                             if(bit && first_bit){
                                 // decode sign
