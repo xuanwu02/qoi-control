@@ -69,9 +69,6 @@ bool halfing_error_V_TOT_uniform(const T * Vx, const T * Vy, const T * Vz, size_
 		}
 
 	}
-	std::cout << "Vx = " << Vx[max_index] << " Vy = " << Vy[max_index] << " Vz = " << Vz[max_index] << std::endl;
-	std::cout << "eb_Vx = " << eb_Vx << " eb_Vy = " << eb_Vy << " eb_Vz = " << eb_Vz << std::endl;
-	std::cout << "coeff_x = " << fabs(Vx[max_index])*eb_Vx << " coeff_y = " << fabs(Vy[max_index])*eb_Vy <<  " coeff_z = " << fabs(Vz[max_index])*eb_Vz << std::endl;
 	std::cout << names[0] << ": max estimated error = " << max_value << ", index = " << max_index << std::endl;
 	// estimate error bound based on maximal errors
 	if(max_value > tau){
@@ -90,7 +87,6 @@ bool halfing_error_V_TOT_uniform(const T * Vx, const T * Vy, const T * Vz, size_
 			eb_Vy = eb_Vy / 1.5;
 			eb_Vz = eb_Vz / 1.5; 							        		
 			double e_V_TOT_2 = compute_bound_x_square(Vx[i], eb_Vx) + compute_bound_x_square(Vy[i], eb_Vy) + compute_bound_x_square(Vz[i], eb_Vz);
-			// double e_V_TOT = compute_bound_square_root_x(V_TOT_2, e_V_TOT_2);
 			estimate_error = compute_bound_square_root_x(V_TOT_2, e_V_TOT_2);
 		}
 		ebs[0] = eb_Vx;

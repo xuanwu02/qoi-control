@@ -50,9 +50,6 @@ bool halfing_error_XiXj_uniform(const T * Xi, const T * Xj, size_t n, const doub
 			max_err_index = i;
 		}
 	}
-	// std::cout << "XiXj: max actual error = " << max_err << ", index = " << max_err_index  << ", Xi_dec = " << Xi[max_err_index] << ", Xj_dec = " << Xj[max_err_index] << std::endl;
-	// std::cout << "eb_Xi = " << eb_Xi << ", eb_Xj = " << eb_Xj << std::endl;
-	// std::cout << "XiXj_ori = " << XiXj_ori[max_err_index] << std::endl;
 	std::cout << "XiXj: max estimated error = " << max_value << ", index = " << max_index << std::endl;
 	// estimate error bound based on maximal errors
 	if(max_value > tau){

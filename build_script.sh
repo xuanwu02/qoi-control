@@ -20,8 +20,8 @@ make install
 cd ${external_dir}
 git clone https://github.com/szcompressor/SZ3.git
 cd SZ3
-#git reset --hard de980d9ce85dd3bec7856ab9007abe5d3c2e262f
-git reset --hard 7fa420d4fc6b0ffa9365ce9b1f815546c3cc125a
+cp -r ${source_dir}/SZ3_src src
+cp ${source_dir}/SZ3_version.hpp include/SZ3/version.hpp
 cp ${source_dir}/SZ3_CMakeLists.txt CMakeLists.txt
 mkdir -p build
 cd build
@@ -39,11 +39,7 @@ cmake -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_INSTALL_PREFIX=${e
 make -j 8
 make install
 
-# clone compression utils
-cd ${external_dir}
-git clone https://github.com/lxAltria/compression_utils.git
-
-# build MDR
+# build MDR-qoi-control
 cd ${source_dir}
 mkdir -p build
 cd build

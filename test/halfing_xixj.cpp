@@ -50,9 +50,6 @@ bool halfing_error_XiXj_uniform(const T * Xi, const T * Xj, size_t n, const doub
 			max_err_index = i;
 		}
 	}
-	// std::cout << "XiXj: max actual error = " << max_err << ", index = " << max_err_index  << ", Xi_dec = " << Xi[max_err_index] << ", Xj_dec = " << Xj[max_err_index] << std::endl;
-	// std::cout << "eb_Xi = " << eb_Xi << ", eb_Xj = " << eb_Xj << std::endl;
-	// std::cout << "XiXj_ori = " << XiXj_ori[max_err_index] << std::endl;
 	std::cout << "XiXj: max estimated error = " << max_value << ", index = " << max_index << std::endl;
 	// estimate error bound based on maximal errors
 	if(max_value > tau){
@@ -95,9 +92,6 @@ int main(int argc, char **argv){
     std::vector<T> XiXj(num_elements);
 	for(int i=0; i<num_elements; i++){
 		XiXj[i] = Xi_ori[i] * Xj_ori[i];
-		if(i == 72973796){
-			std::cout << "72973796: Xi = " << Xi_ori[i] << ", Xj = " << Xj_ori[i] << std::endl;
-		}
 	}
 	XiXj_ori = XiXj.data();
 	double tau = compute_value_range(XiXj)*target_rel_eb;

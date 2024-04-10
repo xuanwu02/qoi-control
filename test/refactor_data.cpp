@@ -22,9 +22,9 @@ int main(int argc, char** argv){
         refactor_GE_SZ3_delta<T>();
     }
     else{
-        int n1 = atoi(argv[arg_pos++]);
-        int n2 = atoi(argv[arg_pos++]);
-        int n3 = atoi(argv[arg_pos++]);
+        uint32_t n1 = atoi(argv[arg_pos++]);
+        uint32_t n2 = atoi(argv[arg_pos++]);
+        uint32_t n3 = atoi(argv[arg_pos++]);
         if(data == "S3D"){
             refactor_S3D<T>(n1, n2, n3);
             refactor_S3D_SZ3<T>(n1, n2, n3);

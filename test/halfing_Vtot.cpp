@@ -69,9 +69,6 @@ bool halfing_error_V_TOT_uniform(const T * Vx, const T * Vy, const T * Vz, size_
 		}
 
 	}
-	std::cout << "Vx = " << Vx[max_index] << " Vy = " << Vy[max_index] << " Vz = " << Vz[max_index] << std::endl;
-	std::cout << "eb_Vx = " << eb_Vx << " eb_Vy = " << eb_Vy << " eb_Vz = " << eb_Vz << std::endl;
-	std::cout << "coeff_x = " << fabs(Vx[max_index])*eb_Vx << " coeff_y = " << fabs(Vy[max_index])*eb_Vy <<  " coeff_z = " << fabs(Vz[max_index])*eb_Vz << std::endl;
 	std::cout << names[0] << ": max estimated error = " << max_value << ", index = " << max_index << std::endl;
 	// estimate error bound based on maximal errors
 	if(max_value > tau){

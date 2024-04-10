@@ -59,7 +59,7 @@ char * SZ3_compress(size_t num_elements, T * data, double abs_eb, size_t& compre
 }
 
 template<class T>
-char * SZ3_compress_3D(size_t num_elements, int n1, int n2, int n3, T * data, double abs_eb, size_t& compressed_size){
+char * SZ3_compress_3D(size_t num_elements, uint32_t n1, uint32_t n2, uint32_t n3, T * data, double abs_eb, size_t& compressed_size){
     SZ3::Config conf(n1, n2, n3);
     conf.cmprAlgo = SZ3::ALGO_INTERP_LORENZO;
     conf.errorBoundMode = SZ3::EB_ABS;
@@ -296,7 +296,7 @@ void refactor_GE_SZ3_delta(){
 }
 
 template<class Type>
-void refactor_S3D(int n1, int n2, int n3){
+void refactor_S3D(uint32_t n1, uint32_t n2, uint32_t n3){
     std::string s3d_data_file_prefix = "/Users/xuanwu/github/datasets/S3D/data/";
     std::string s3d_rdata_file_prefix = "/Users/xuanwu/github/datasets/S3D/refactor/";
     std::vector<std::string> species = {"H2", "O2", "H2O", "H", "O", "OH"};
@@ -334,7 +334,7 @@ void refactor_S3D(int n1, int n2, int n3){
 }
 
 template<class Type>
-void refactor_S3D_SZ3(int n1, int n2, int n3){
+void refactor_S3D_SZ3(uint32_t n1, uint32_t n2, uint32_t n3){
     std::string s3d_data_file_prefix = "/Users/xuanwu/github/datasets/S3D/data/";
     std::string s3d_rdata_file_prefix = "/Users/xuanwu/github/datasets/S3D/refactor/";
     std::vector<std::string> species = {"H2", "O2", "H2O", "H", "O", "OH"};
@@ -372,7 +372,7 @@ void refactor_S3D_SZ3(int n1, int n2, int n3){
 }
 
 template<class Type>
-void refactor_S3D_SZ3_delta(int n1, int n2, int n3){
+void refactor_S3D_SZ3_delta(uint32_t n1, uint32_t n2, uint32_t n3){
     std::string s3d_data_file_prefix = "/Users/xuanwu/github/datasets/S3D/data/";
     std::string s3d_rdata_file_prefix = "/Users/xuanwu/github/datasets/S3D/refactor/";
     std::vector<std::string> species = {"H2", "O2", "H2O", "H", "O", "OH"};
@@ -417,12 +417,12 @@ void refactor_S3D_SZ3_delta(int n1, int n2, int n3){
 }
 
 template<class Type>
-void refactor_velocities_3d(std::string dataset, int n1, int n2, int n3){
+void refactor_velocities_3d(std::string dataset, uint32_t n1, uint32_t n2, uint32_t n3){
     size_t num_elements = 0;
-    auto VelocityX_vec = MGARD::readfile<Type>((data_file_prefix + dataset + "_velocity_x.dat").c_str(), num_elements);
-    auto VelocityY_vec = MGARD::readfile<Type>((data_file_prefix + dataset + "_velocity_x.dat").c_str(), num_elements);
-    auto VelocityZ_vec = MGARD::readfile<Type>((data_file_prefix + dataset + "_velocity_x.dat").c_str(), num_elements);
-    std::vector<std::vector<Type>> vars_vec = {VelocityX_vec, VelocityY_vec, VelocityZ_vec};
+    auto velocityX_vec = MGARD::readfile<Type>((data_file_prefix + dataset + "_velocity_x.dat").c_str(), num_elements);
+    auto velocityY_vec = MGARD::readfile<Type>((data_file_prefix + dataset + "_velocity_x.dat").c_str(), num_elements);
+    auto velocityZ_vec = MGARD::readfile<Type>((data_file_prefix + dataset + "_velocity_x.dat").c_str(), num_elements);
+    std::vector<std::vector<Type>> vars_vec = {velocityX_vec, velocityY_vec, velocityZ_vec};
     std::vector<std::string> var_list = {dataset + "_velocity_x", dataset + "_velocity_y", dataset + "_velocity_z"};
     int n_variable = var_list.size();
 
