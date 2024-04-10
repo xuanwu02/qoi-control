@@ -130,44 +130,42 @@ int main(int argc, char ** argv){
 	mu_ori = mu.data();
     double tau = compute_value_range(mu)*target_rel_eb;
 
-    std::vector<MDR::ComposedReconstructor<T, MGARDHierarchicalDecomposer<T>, DirectInterleaver<T>, PerBitBPEncoder<T, uint32_t>, AdaptiveLevelCompressor, SignExcludeGreedyBasedSizeInterpreter<MaxErrorEstimatorHB<T>>, MaxErrorEstimatorHB<T>, ConcatLevelFileRetriever>> reconstructors;
-    for(int i=0; i<n_variable; i++){
-        std::string rdir_prefix = rdata_file_prefix + varlist[i+3];
-        std::string metadata_file = rdir_prefix + "_refactored_data/metadata.bin";
-        std::vector<std::string> files;
-        int num_levels = 9;
-        for(int i=0; i<num_levels; i++){
-            std::string filename = rdir_prefix + "_refactored_data/level_" + std::to_string(i) + ".bin";
-            files.push_back(filename);
-        }
-        auto decomposer = MGARDHierarchicalDecomposer<T>();
-        auto interleaver = DirectInterleaver<T>();
-        auto encoder = PerBitBPEncoder<T, uint32_t>();
-        auto compressor = AdaptiveLevelCompressor(64);
-        auto estimator = MaxErrorEstimatorHB<T>();
-        auto interpreter = SignExcludeGreedyBasedSizeInterpreter<MaxErrorEstimatorHB<T>>(estimator);
-        auto retriever = ConcatLevelFileRetriever(metadata_file, files);
-        reconstructors.push_back(generateReconstructor<T>(decomposer, interleaver, encoder, compressor, estimator, interpreter, retriever));
-        reconstructors.back().load_metadata();
-    }    
     std::vector<std::vector<T>> reconstructed_vars(n_variable, std::vector<double>(num_elements));
-	std::vector<size_t> total_retrieved_size(n_variable, 0);
+	std::vector<size_t> total_retrieved_sizes(n_variable, 0);
 
     int iter = 0;
     int max_iter = 5;
 	bool tolerance_met = false;
 	double max_act_error = 0, max_est_error = 0;
+    std::vector<int> current_ind(n_variable, -1);
+    T * reconstructed_data = (T *) malloc(num_elements * sizeof(T));
     while((!tolerance_met) && (iter < max_iter)){
-    	iter ++;
-	    for(int i=0; i<n_variable; i++){
-	        auto reconstructed_data = reconstructors[i].progressive_reconstruct(ebs[i], -1);
-	        memcpy(reconstructed_vars[i].data(), reconstructed_data, num_elements*sizeof(T));
-			total_retrieved_size[i] = reconstructors[i].get_retrieved_size();
-	    }
+        iter ++;
+        for(int i=0; i<n_variable; i++){
+            std::string rdir_prefix = rdata_file_prefix + varlist[i+3];
+            double file_eb = 0.1;
+            auto file_ind = find_index(ebs[i]/var_range[i], file_eb);
+            std::cout << "file_ind = " << file_ind << std::endl;
+            std::cout << "Requested relative tolerance = " << ebs[i]/var_range[i] << ", expected tolerance = " << file_eb << "\n"; 
+            // std::cout << "Requested tolerance = " << ebs[i] << ", expected tolerance = " << file_eb * var_range[i] << "\n"; 
+            if(file_ind > current_ind[i]){
+                for(int j=current_ind[i]+1; j<=file_ind; j++){
+                    std::string filename = rdir_prefix + "_refactored_data/SZ3_delta_eb_" + std::to_string(j) + ".bin";
+                    size_t n = 0;
+                    auto cmpData = MGARD::readfile<char>(filename.c_str(), n);
+                    total_retrieved_sizes[i] += n;
+                    SZ3_decompress(cmpData.data(), n, reconstructed_data);
+					for(int j=0; j<num_elements; j++){
+						reconstructed_vars[i][j] += reconstructed_data[j];
+					}
+                }
+                current_ind[i] = file_ind;            
+            }
+        }
 	    P_dec = reconstructed_vars[0].data();
 	    D_dec = reconstructed_vars[1].data();
-	    MGARD::print_statistics(P_ori.data(), P_dec, num_elements);
-	    MGARD::print_statistics(D_ori.data(), D_dec, num_elements);
+	    // MGARD::print_statistics(P_ori.data(), P_dec, num_elements);
+	    // MGARD::print_statistics(D_ori.data(), D_dec, num_elements);
 	    error_mu = std::vector<double>(num_elements);
 	    error_est_mu = std::vector<double>(num_elements);
 		std::cout << "iter" << iter << ": The old ebs are:" << std::endl;
@@ -176,23 +174,23 @@ int main(int argc, char ** argv){
 		std::cout << "iter" << iter << ": The new ebs are:" << std::endl;
 	    MDR::print_vec(ebs);
 	    // std::cout << names[5] << " requested error = " << tau << std::endl;
-	    max_act_error = print_max_abs(names[5] + " error", error_mu);
-	    max_est_error = print_max_abs(names[5] + " error_est", error_est_mu);   	
+	    max_est_error = print_max_abs(names[5] + " error_est", error_est_mu); 
+	    max_act_error = print_max_abs(names[5] + " actual error", error_mu);
     }
 	std::cout << "requested error = " << tau << std::endl;
 	std::cout << "max_est_error = " << max_est_error << std::endl;
 	std::cout << "max_act_error = " << max_act_error << std::endl;
+    free(reconstructed_data);
 	std::cout << "iter = " << iter << std::endl;
-   
-   	size_t total_size = std::accumulate(total_retrieved_size.begin(), total_retrieved_size.end(), 0);
-	double cr = n_variable * num_elements * sizeof(T) * 1.0 / total_size;
 	std::cout << "each retrieved size:";
     for(int i=0; i<n_variable; i++){
-        std::cout << total_retrieved_size[i] << ", ";
+        std::cout << total_retrieved_sizes[i] << ", ";
     }
     std::cout << std::endl;
 	// MDR::print_vec(total_retrieved_size);
-	std::cout << "aggregated cr = " << cr << std::endl;
+	size_t total_size = std::accumulate(total_retrieved_sizes.begin(), total_retrieved_sizes.end(), 0);
+	double cr = n_variable * num_elements * sizeof(T) * 1.0 / total_size;
+	std::cout << "aggregated cr = " << cr << std::endl;	
 
     return 0;
 }

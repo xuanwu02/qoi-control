@@ -9,40 +9,9 @@
 #include <bitset>
 #include <numeric>
 
-// const std::string data_file_prefix = "/Users/xuanwu/github/datasets/GE/data/";
-// const std::string rdata_file_prefix = "/Users/xuanwu/github/datasets/GE/refactor/";
-// const std::vector<std::string> varlist = {"VelocityX", "VelocityY", "VelocityZ", "Pressure", "Density"};
 
 namespace MDR{
 
-// std::vector<double> P_ori;
-// std::vector<double> D_ori;
-// std::vector<double> Vx_ori;
-// std::vector<double> Vy_ori;
-// std::vector<double> Vz_ori;
-// double * P_dec = NULL;
-// double * D_dec = NULL;
-// double * Vx_dec = NULL;
-// double * Vy_dec = NULL;
-// double * Vz_dec = NULL;
-// double * V_TOT_ori = NULL;
-// double * Temp_ori = NULL;
-// double * C_ori = NULL;
-// double * Mach_ori = NULL;
-// double * PT_ori = NULL;
-// double * mu_ori = NULL;
-// std::vector<double> error_V_TOT;
-// std::vector<double> error_Temp;
-// std::vector<double> error_C;
-// std::vector<double> error_Mach;
-// std::vector<double> error_PT;
-// std::vector<double> error_mu;
-// std::vector<double> error_est_V_TOT;
-// std::vector<double> error_est_Temp;
-// std::vector<double> error_est_C;
-// std::vector<double> error_est_Mach;
-// std::vector<double> error_est_PT;
-// std::vector<double> error_est_mu;
 const std::vector<std::string> names{"V_TOT", "T", "C", "Mach", "PT", "mu"};
 
 // f(x) = x^2
@@ -198,6 +167,88 @@ void compute_QoIs(const T * Vx, const T * Vy, const T * Vz, const T * P, const T
 }
 
 template <class T>
+void compute_VTOT(const T * Vx, const T * Vy, const T * Vz, size_t n, T * V_TOT_){
+	for(int i=0; i<n; i++){
+		double V_TOT_2 = Vx[i]*Vx[i] + Vy[i]*Vy[i] + Vz[i]*Vz[i];
+		double V_TOT = sqrt(V_TOT_2);
+		V_TOT_[i] = V_TOT;
+	}
+}
+
+template <class T>
+void compute_T(const T * P, const T * D, size_t n, T * Temp_){
+	double R = 287.1;
+	double gamma = 1.4;
+	for(int i=0; i<n; i++){
+		double Temp = P[i] / (D[i] * R);
+		Temp_[i] = Temp;
+	}
+}
+
+template <class T>
+void compute_C(const T * P, const T * D, size_t n, T * C_){
+	double R = 287.1;
+	double gamma = 1.4;
+	for(int i=0; i<n; i++){
+		double Temp = P[i] / (D[i] * R);
+		double C = sqrt(gamma * R * Temp);
+		C_[i] = C;
+	}
+}
+
+template <class T>
+void compute_mu(const T * P, const T * D, size_t n, T * mu_){
+	double R = 287.1;
+	double mu_r = 1.716e-5;
+	double T_r = 273.15;
+	double S = 110.4;
+	for(int i=0; i<n; i++){
+		double Temp = P[i] / (D[i] * R);
+		double TrS_TS = (T_r + S) / (Temp + S);
+		double T_Tr_3 = pow(Temp/T_r, 3);
+		double T_Tr_3_sqrt = sqrt(T_Tr_3);
+		double mu = mu_r * T_Tr_3_sqrt * TrS_TS;
+		mu_[i] = mu;
+	}
+}
+
+template <class T>
+void compute_Mach(const T * Vx, const T * Vy, const T * Vz, const T * P, const T * D, size_t n, T * Mach_){
+	double R = 287.1;
+	double gamma = 1.4;
+	double mi = 3.5;
+	double mu_r = 1.716e-5;
+	double T_r = 273.15;
+	double S = 110.4;
+	for(int i=0; i<n; i++){
+		double V_TOT_2 = Vx[i]*Vx[i] + Vy[i]*Vy[i] + Vz[i]*Vz[i];
+		double V_TOT = sqrt(V_TOT_2);
+		double Temp = P[i] / (D[i] * R);
+		double C = sqrt(gamma * R * Temp);
+		double Mach = V_TOT / C;
+		Mach_[i] = Mach;
+	}
+}
+
+template <class T>
+void compute_PT(const T * Vx, const T * Vy, const T * Vz, const T * P, const T * D, size_t n, T * PT_){
+	double R = 287.1;
+	double gamma = 1.4;
+	double mi = 3.5;
+	for(int i=0; i<n; i++){
+		double V_TOT_2 = Vx[i]*Vx[i] + Vy[i]*Vy[i] + Vz[i]*Vz[i];
+		double V_TOT = sqrt(V_TOT_2);
+		double Temp = P[i] / (D[i] * R);
+		double C = sqrt(gamma * R * Temp);
+		double Mach = V_TOT / C;
+		double Mach_tmp = 1 + (gamma-1)/2 * Mach * Mach;
+		double Mach_tmp_mi = sqrt(pow(Mach_tmp, 7));
+		double PT = P[i] * Mach_tmp_mi;
+		PT_[i] = PT;
+	}
+}
+
+template <class T>
 T compute_value_range(const std::vector<T>& vec){
 	T min = vec[0];
 	T max = vec[0];
@@ -219,13 +270,23 @@ void print_info(const std::string& name, const std::vector<T>& vec){
 	std::cout << name << ": min value = " << min << ", max value = " << max << ", value range = " << max - min << std::endl;
 }
 
+// template <class T>
+// void print_max_abs(const std::string& name, const std::vector<T>& vec){
+// 	T max = fabs(vec[0]);
+// 	for(int i=1; i<vec.size(); i++){
+// 		if(max < fabs(vec[i])) max = fabs(vec[i]);
+// 	}
+// 	std::cout << name << ": max absolute value = " << max << std::endl;
+// }
+
 template <class T>
-void print_max_abs(const std::string& name, const std::vector<T>& vec){
+T print_max_abs(const std::string& name, const std::vector<T>& vec){
 	T max = fabs(vec[0]);
 	for(int i=1; i<vec.size(); i++){
 		if(max < fabs(vec[i])) max = fabs(vec[i]);
 	}
-	std::cout << name << ": max absolute value = " << max << std::endl;
+	// std::cout << name << ": max absolute value = " << max << std::endl;
+	return max;
 }
 
 template <class T>
@@ -238,88 +299,6 @@ inline void normalize_coefficient(T& coeff_0, T& coeff_1){
 		coeff_1 = 1.5;
 	}
 }
-
-// template <class T>
-// void estimate_error_T(const T * P, const T * D, size_t n, const double tau, std::vector<double>& ebs){
-// 	double eb_P = ebs[0];
-// 	double eb_D = ebs[1];
-// 	double R = 287.1;
-// 	double c_1 = 1.0 / R;
-// 	double max_value;
-// 	int max_index;
-// 	for(int i=0; i<n; i++){
-// 		// error of temperature
-// 		double e_T = c_1 * compute_bound_division(P[i], D[i], eb_P, eb_D);
-// 		double Temp = P[i] / (D[i] * R);
-// 		// print_error("T", Temp, Temp_ori[i], e_T);
-
-// 		error_est_Temp[i] = e_T;
-// 		error_Temp[i] = Temp - Temp_ori[i];
-// 		if(max_value < error_est_Temp[i]){
-// 			max_value = error_est_Temp[i];
-// 			max_index = i;
-// 		}
-// 	}
-// 	std::cout << "T alone : max estimated error = " << max_value << ", index = " << max_index << std::endl;
-// 	// estimate error bound based on maximal errors
-// 	{
-// 		std::vector<double> new_ebs(2, 0);
-// 		// error of temperature
-// 		int i = max_index;
-// 		// assuming the same scale on error bound deduction
-// 		double scale = UniformTighteningT(P[i], D[i], eb_P, eb_D, c_1, tau[1]);
-// 		if(scale < 1){
-// 			new_ebs[0] = ebs[0] * scale;
-// 			new_ebs[1] = ebs[1] * scale;
-// 		}
-// 		for(int i=0; i<ebs.size(); i++){
-// 			ebs[i] = new_ebs[i];
-// 		}	
-// 	}
-// }
-
-// template <class T>
-// void estimate_error_C(const T * P, const T * D, size_t n, const double tau, std::vector<double>& ebs){
-// 	double eb_P = ebs[0];
-// 	double eb_D = ebs[1];
-// 	double R = 287.1;
-// 	double gamma = 1.4;
-// 	double c_1 = 1.0 / R;
-// 	double c_2 = sqrt(gamma * R);
-// 	double max_value;
-// 	int max_index;
-// 	for(int i=0; i<n; i++){
-// 		// error of C
-// 		double e_C = c_2*compute_bound_square_root_x(Temp, e_T);
-// 		double C = c_2 * sqrt(Temp);
-// 		// print_error("C", C, C_ori[i], e_C);
-// 		for(int i=1; i<=7; i++){
-// 			e_Mach_tmp_mi += C7i[i] * pow(Mach_tmp, 7-i) * pow(e_Mach_tmp, i);
-// 		}
-// 		error_est_C[i] = e_C;
-// 		error_C[i] = C - C_ori[i];
-// 		if(max_value < error_est_C[i]){
-// 			max_value = error_est_C[i];
-// 			max_index = i;
-// 		}
-// 	}
-// 	std::cout << "C alone : max estimated error = " << max_value << ", index = " << max_index << std::endl;
-// 	// estimate error bound based on maximal errors
-// 	{
-// 		std::vector<double> new_ebs(2, 0);
-// 		// error of C
-// 		int i = max_index;
-// 		// assuming the same scale on error bound deduction
-// 		double scale = UniformTighteningC(P[i], D[i], eb_P, eb_D); // update
-// 		if(scale < 1){
-// 			new_ebs[0] = ebs[0] * scale;
-// 			new_ebs[1] = ebs[1] * scale;			
-// 		}
-// 		for(int i=0; i<ebs.size(); i++){
-// 			ebs[i] = new_ebs[i];
-// 		}	
-// 	}
-// }
 
 }
 #endif

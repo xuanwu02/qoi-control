@@ -43,7 +43,7 @@ std::vector<double> error_est_mu;
 
 
 template<class T>
-bool halfing_error_PT_uniform(const T * Vx, const T * Vy, const T * Vz, const T * P, const T * D, size_t n, const std::vector<unsigned char>& mask, const double tau, std::vector<double>& ebs){
+bool halfing_error_Mach_uniform(const T * Vx, const T * Vy, const T * Vz, const T * P, const T * D, size_t n, const std::vector<unsigned char>& mask, const double tau, std::vector<double>& ebs){
 	double eb_Vx = ebs[0];
 	double eb_Vy = ebs[1];
 	double eb_Vz = ebs[2];
@@ -65,29 +65,26 @@ bool halfing_error_PT_uniform(const T * Vx, const T * Vy, const T * Vz, const T 
 		double e_V_TOT_2 = 0;
 		if(mask[i]) e_V_TOT_2 = compute_bound_x_square(Vx[i], eb_Vx) + compute_bound_x_square(Vy[i], eb_Vy) + compute_bound_x_square(Vz[i], eb_Vz);
 		double V_TOT_2 = Vx[i]*Vx[i] + Vy[i]*Vy[i] + Vz[i]*Vz[i];
+		// error of total velocity
 		double e_V_TOT = 0;
 		if(mask[i]) e_V_TOT = compute_bound_square_root_x(V_TOT_2, e_V_TOT_2);
 		double V_TOT = sqrt(V_TOT_2);
+		// print_error("V_TOT", V_TOT, V_TOT_ori[i], e_V_TOT);
+		// error of temperature
 		double e_T = c_1 * compute_bound_division(P[i], D[i], eb_P, eb_D);
 		double Temp = P[i] / (D[i] * R);
+		// print_error("T", Temp, Temp_ori[i], e_T);
+		// error of C
 		double e_C = c_2*compute_bound_square_root_x(Temp, e_T);
 		double C = c_2 * sqrt(Temp);
+		// print_error("C", C, C_ori[i], e_C);
 		double e_Mach = compute_bound_division(V_TOT, C, e_V_TOT, e_C);
 		double Mach = V_TOT / C;
-		double e_Mach_tmp = (gamma-1) / 2 * compute_bound_x_square(Mach, e_Mach);
-		double Mach_tmp = 1 + (gamma-1)/2 * Mach * Mach;
-		double e_Mach_tmp_mi = 0;
-		for(int i=1; i<=7; i++){
-			e_Mach_tmp_mi += C7i[i] * pow(Mach_tmp, 7-i) * pow(e_Mach_tmp, i);
-		}
-		double Mach_tmp_mi = sqrt(pow(Mach_tmp, 7));
-		double e_PT = compute_bound_multiplication(P[i], Mach_tmp_mi, eb_P, e_Mach_tmp_mi);
-		double PT = P[i] * Mach_tmp_mi;
-
-		error_est_PT[i] = e_PT;
-		error_PT[i] = PT - PT_ori[i];
-		if(max_value < error_est_PT[i]){
-			max_value = error_est_PT[i];
+		// print_error("Mach", Mach, Mach_ori[i], e_Mach);
+		error_est_Mach[i] = e_Mach;
+		error_Mach[i] = Mach - Mach_ori[i];
+		if(max_value < error_est_Mach[i]){
+			max_value = error_est_Mach[i];
 			max_index = i;
 		}
 	}
@@ -118,16 +115,7 @@ bool halfing_error_PT_uniform(const T * Vx, const T * Vy, const T * Vz, const T 
 			double Temp = P[i] / (D[i] * R);
 			double e_C = c_2*compute_bound_square_root_x(Temp, e_T);
 			double C = c_2 * sqrt(Temp);
-			double e_Mach = compute_bound_division(V_TOT, C, e_V_TOT, e_C);
-			double Mach = V_TOT / C;
-			double e_Mach_tmp = (gamma-1) / 2 * compute_bound_x_square(Mach, e_Mach);
-			double Mach_tmp = 1 + (gamma-1)/2 * Mach * Mach;
-			double e_Mach_tmp_mi = 0;
-			for(int i=1; i<=7; i++){
-				e_Mach_tmp_mi += C7i[i] * pow(Mach_tmp, 7-i) * pow(e_Mach_tmp, i);
-			}
-			double Mach_tmp_mi = sqrt(pow(Mach_tmp, 7));
-			estimate_error = compute_bound_multiplication(P[i], Mach_tmp_mi, eb_P, e_Mach_tmp_mi);
+			estimate_error = compute_bound_division(V_TOT, C, e_V_TOT, e_C);
 		}
 		ebs[0] = eb_Vx;
 		ebs[1] = eb_Vy;
@@ -143,8 +131,7 @@ bool halfing_error_PT_uniform(const T * Vx, const T * Vy, const T * Vz, const T 
 int main(int argc, char ** argv){
 
     using T = double;
-	int argv_id = 1;
-    double target_rel_eb = atof(argv[argv_id++]);
+    double target_rel_eb = atof(argv[1]);
 
     size_t num_elements = 0;
     P_ori = MGARD::readfile<T>((data_file_prefix + "Pressure.dat").c_str(), num_elements);
@@ -165,94 +152,93 @@ int main(int argc, char ** argv){
         var_range[i] = compute_value_range(vars_vec[i]);
     } 
 
-    std::vector<T> PT(num_elements);
-    compute_PT(Vx_ori.data(), Vy_ori.data(), Vz_ori.data(), P_ori.data(), D_ori.data(), num_elements, PT.data());
-	PT_ori = PT.data();
-    double tau = compute_value_range(PT)*target_rel_eb;
+    std::vector<T> Mach(num_elements);
+    compute_Mach(Vx_ori.data(), Vy_ori.data(), Vz_ori.data(), P_ori.data(), D_ori.data(), num_elements, Mach.data());
+	Mach_ori = Mach.data();
+    double tau = compute_value_range(Mach)*target_rel_eb;
 
     std::string mask_file = rdata_file_prefix + "mask.bin";
     size_t num_valid_data = 0;
     auto mask = MGARD::readfile<unsigned char>(mask_file.c_str(), num_valid_data);
-    std::vector<MDR::ComposedReconstructor<T, MGARDHierarchicalDecomposer<T>, DirectInterleaver<T>, PerBitBPEncoder<T, uint32_t>, AdaptiveLevelCompressor, SignExcludeGreedyBasedSizeInterpreter<MaxErrorEstimatorHB<T>>, MaxErrorEstimatorHB<T>, ConcatLevelFileRetriever>> reconstructors;
-    for(int i=0; i<n_variable; i++){
-        std::string rdir_prefix = rdata_file_prefix + varlist[i];
-        std::string metadata_file = rdir_prefix + "_refactored_data/metadata.bin";
-        std::vector<std::string> files;
-        int num_levels = 9;
-        for(int i=0; i<num_levels; i++){
-            std::string filename = rdir_prefix + "_refactored_data/level_" + std::to_string(i) + ".bin";
-            files.push_back(filename);
-        }
-        auto decomposer = MGARDHierarchicalDecomposer<T>();
-        auto interleaver = DirectInterleaver<T>();
-        auto encoder = PerBitBPEncoder<T, uint32_t>();
-        auto compressor = AdaptiveLevelCompressor(64);
-        auto estimator = MaxErrorEstimatorHB<T>();
-        auto interpreter = SignExcludeGreedyBasedSizeInterpreter<MaxErrorEstimatorHB<T>>(estimator);
-        auto retriever = ConcatLevelFileRetriever(metadata_file, files);
-        reconstructors.push_back(generateReconstructor<T>(decomposer, interleaver, encoder, compressor, estimator, interpreter, retriever));
-        reconstructors.back().load_metadata();
-    }    
+ 
     std::vector<std::vector<T>> reconstructed_vars(n_variable, std::vector<double>(num_elements));
-	std::vector<size_t> total_retrieved_size(n_variable, 0);
+	std::vector<size_t> total_retrieved_sizes(n_variable, 0);
 
     int iter = 0;
     int max_iter = 5;
 	bool tolerance_met = false;
 	double max_act_error = 0, max_est_error = 0;
+    std::vector<int> current_ind(n_variable, -1);
+    T * reconstructed_data = (T *) malloc(num_elements * sizeof(T));
     while((!tolerance_met) && (iter < max_iter)){
-    	iter ++;
-	    for(int i=0; i<n_variable; i++){
-	        auto reconstructed_data = reconstructors[i].progressive_reconstruct(ebs[i], -1);
-			total_retrieved_size[i] = reconstructors[i].get_retrieved_size();
-	        if(i < 3){
-	            // reconstruct with mask
-	            int index = 0;
-	            for(int j=0; j<num_elements; j++){
-	                if(mask[j]){
-	                    reconstructed_vars[i][j] = reconstructed_data[index ++];
-	                }
-	                else reconstructed_vars[i][j] = 0;
-	            }
-	        }
-	        else{
-	            memcpy(reconstructed_vars[i].data(), reconstructed_data, num_elements*sizeof(T));
-	        }
-	    }
+        iter ++;
+        for(int i=0; i<n_variable; i++){
+            std::string rdir_prefix = rdata_file_prefix + varlist[i];
+            double file_eb = 0.1;
+            auto file_ind = find_index(ebs[i]/var_range[i], file_eb);
+            std::cout << "file_ind = " << file_ind << std::endl;
+            std::cout << "Requested relative tolerance = " << ebs[i]/var_range[i] << ", expected tolerance = " << file_eb << "\n"; 
+            // std::cout << "Requested tolerance = " << ebs[i] << ", expected tolerance = " << file_eb * var_range[i] << "\n"; 
+			// if(file_ind >= 8){
+			// 	std::cout << "reached maximum capacity" << std::endl;
+			// 	file_ind = 7;
+			// }
+            std::string filename = rdir_prefix + "_refactored_data/SZ3_eb_" + std::to_string(file_ind) + ".bin";
+            size_t n = 0;
+            auto cmpData = MGARD::readfile<char>(filename.c_str(), n);
+            SZ3_decompress(cmpData.data(), n, reconstructed_data);
+            if(file_ind > current_ind[i]){
+                current_ind[i] = file_ind;
+                total_retrieved_sizes[i] += n;
+            }
+            if(i < 3){
+                // reconstruct with mask
+                int index = 0;
+                for(int j=0; j<num_elements; j++){
+                    if(mask[j]){
+                        reconstructed_vars[i][j] = reconstructed_data[index ++];
+                    }
+                    else reconstructed_vars[i][j] = 0;
+                }
+            }
+            else{
+                memcpy(reconstructed_vars[i].data(), reconstructed_data, num_elements*sizeof(T));
+            }
+        }
 	    Vx_dec = reconstructed_vars[0].data();
 	    Vy_dec = reconstructed_vars[1].data();
 	    Vz_dec = reconstructed_vars[2].data();
 	    P_dec = reconstructed_vars[3].data();
 	    D_dec = reconstructed_vars[4].data();
-	    MGARD::print_statistics(Vx_ori.data(), Vx_dec, num_elements);
-	    MGARD::print_statistics(Vy_ori.data(), Vy_dec, num_elements);
-	    MGARD::print_statistics(Vz_ori.data(), Vz_dec, num_elements);
-	    MGARD::print_statistics(P_ori.data(), P_dec, num_elements);
-	    MGARD::print_statistics(D_ori.data(), D_dec, num_elements);
-	    error_PT = std::vector<double>(num_elements);
-	    error_est_PT = std::vector<double>(num_elements);
+	    // MGARD::print_statistics(Vx_ori.data(), Vx_dec, num_elements);
+	    // MGARD::print_statistics(Vy_ori.data(), Vy_dec, num_elements);
+	    // MGARD::print_statistics(Vz_ori.data(), Vz_dec, num_elements);
+	    // MGARD::print_statistics(P_ori.data(), P_dec, num_elements);
+	    // MGARD::print_statistics(D_ori.data(), D_dec, num_elements);
+	    error_Mach = std::vector<double>(num_elements);
+	    error_est_Mach = std::vector<double>(num_elements);
 		std::cout << "iter" << iter << ": The old ebs are:" << std::endl;
 	    MDR::print_vec(ebs);
-	    tolerance_met = halfing_error_PT_uniform(Vx_dec, Vy_dec, Vz_dec, P_dec, D_dec, num_elements, mask, tau, ebs);
+	    tolerance_met = halfing_error_Mach_uniform(Vx_dec, Vy_dec, Vz_dec, P_dec, D_dec, num_elements, mask, tau, ebs);
 		std::cout << "iter" << iter << ": The new ebs are:" << std::endl;
 	    MDR::print_vec(ebs);
-	    // std::cout << names[4] << " requested error = " << tau << std::endl;
-	    max_act_error = print_max_abs(names[4] + " error", error_PT);
-	    max_est_error = print_max_abs(names[4] + " error_est", error_est_PT);   	
+	    // std::cout << names[3] << " requested error = " << tau << std::endl;
+	    max_est_error = print_max_abs(names[3] + " error_est", error_est_Mach);   
+	    max_act_error = print_max_abs(names[3] + " actual error", error_Mach);
     }
 	std::cout << "requested error = " << tau << std::endl;
 	std::cout << "max_est_error = " << max_est_error << std::endl;
 	std::cout << "max_act_error = " << max_act_error << std::endl;
+    free(reconstructed_data);
 	std::cout << "iter = " << iter << std::endl;
-   
-   	size_t total_size = std::accumulate(total_retrieved_size.begin(), total_retrieved_size.end(), 0);
-	double cr = n_variable * num_elements * sizeof(T) * 1.0 / total_size;
 	std::cout << "each retrieved size:";
     for(int i=0; i<n_variable; i++){
-        std::cout << total_retrieved_size[i] << ", ";
+        std::cout << total_retrieved_sizes[i] << ", ";
     }
     std::cout << std::endl;
 	// MDR::print_vec(total_retrieved_size);
+	size_t total_size = std::accumulate(total_retrieved_sizes.begin(), total_retrieved_sizes.end(), 0);
+	double cr = n_variable * num_elements * sizeof(T) * 1.0 / total_size;
 	std::cout << "aggregated cr = " << cr << std::endl;
 
     return 0;
