@@ -8,7 +8,6 @@ cd ${external_dir}
 git clone https://github.com/szcompressor/SZ.git
 cd SZ
 git reset --hard f48d2f27a5470a28e900db9b46bb3344a2bc211f
-cp ../../../MDR/external/SZ/CMakeLists.txt .
 mkdir -p build
 mkdir -p install
 cd build
@@ -21,7 +20,6 @@ cd ${external_dir}
 git clone https://github.com/szcompressor/SZ3.git
 cd SZ3
 cp -r ${source_dir}/SZ3_src src
-cp ${source_dir}/SZ3_version.hpp include/SZ3/version.hpp
 cp ${source_dir}/SZ3_CMakeLists.txt CMakeLists.txt
 mkdir -p build
 cd build
@@ -36,6 +34,16 @@ mkdir -p build
 mkdir -p install
 cd build
 cmake -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_INSTALL_PREFIX=${external_dir}/MGARDx/install ..
+make -j 8
+make install
+
+# build ADIOS2
+cd ${external_dir}
+git clone https://github.com/ornladios/ADIOS2.git
+cd ADIOS2
+mkdir -p adios2-build && mkdir -p adios2-install
+cd adios2-build
+cmake -DADIOS2_USE_MPI=OFF -DADIOS2_USE_SZ=OFF -DCMAKE_INSTALL_PREFIX=${external_dir}/ADIOS2/adios2-install ..
 make -j 8
 make install
 

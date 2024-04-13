@@ -178,8 +178,8 @@ int main(int argc, char ** argv){
 		std::cout << "iter" << iter << ": The new ebs are:" << std::endl;
 	    MDR::print_vec(ebs);
 	    // std::cout << names[0] << " requested error = " << tau << std::endl;
-	    max_act_error = print_max_abs(names[1] + " error", error_Temp);
-	    max_est_error = print_max_abs(names[1] + " error_est", error_est_Temp);  
+	    max_act_error = print_max_abs(names[0] + " error", error_V_TOT);
+	    max_est_error = print_max_abs(names[0] + " error_est", error_est_V_TOT);  
     }
 	std::cout << "requested error = " << tau << std::endl;
 	std::cout << "max_est_error = " << max_est_error << std::endl;
