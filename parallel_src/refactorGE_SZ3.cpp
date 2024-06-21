@@ -1,13 +1,18 @@
 #include <cmath>
 #include <fstream>
+#include <thread>
+#include <chrono>
+#include <ctime>
+#include <cmath>
+#include <fstream>
 #include <iostream>
 #include <vector>
 #include <thread>
 #include <chrono>
 #include <dirent.h>
 #include <zstd.h>
-#include "adios2.h"
 #include "mpi.h"
+#include "adios2.h"
 #include "SZ3/api/sz.hpp"
 #include "recompose.hpp"
 
@@ -56,8 +61,8 @@ void SZ3_decompress(char * cmpData, size_t compressed_size, T * dec_data){
 }
 
 template<class Type>
-void refactor_singleZone(int rank, int num_elements, std::vector<Type>& velocityX_vec, std::vector<Type>& velocityY_vec, std::vector<Type>& velocityZ_vec, std::vector<Type>& pressure_vec, std::vector<Type>& density_vec){
-    std::string filename = "/pscratch/xli281_uksr/xliang/GE/sol_4114800_aver_b" + std::to_string(rank) + ".bp/";
+void refactor_singleZone(const std::string data_prefix_path, int rank, int num_elements, std::vector<Type>& velocityX_vec, std::vector<Type>& velocityY_vec, std::vector<Type>& velocityZ_vec, std::vector<Type>& pressure_vec, std::vector<Type>& density_vec){
+    std::string filename = data_prefix_path + "/data/sol_4114800_aver_b" + std::to_string(rank) + ".bp/";
     MGARD::writefile((filename + var_name_out[0] + ".dat").c_str(), velocityX_vec.data(), velocityX_vec.size());
     MGARD::writefile((filename + var_name_out[1] + ".dat").c_str(), velocityY_vec.data(), velocityX_vec.size());
     MGARD::writefile((filename + var_name_out[2] + ".dat").c_str(), velocityZ_vec.data(), velocityX_vec.size());
@@ -74,7 +79,7 @@ void refactor_singleZone(int rank, int num_elements, std::vector<Type>& velocity
             num_valid_data ++;
         }
     }
-    std::string mask_file = "/pscratch/xli281_uksr/xliang/GE/block_" + std::to_string(rank) + "_refactored/mask.bin";
+    std::string mask_file = data_prefix_path + "/refactor/block_" + std::to_string(rank) + "_refactored/mask.bin";
     MGARD::writefile(mask_file.c_str(), mask.data(), mask.size());
     std::vector<std::vector<Type>> vars_vec = {velocityX_vec, velocityY_vec, velocityZ_vec, pressure_vec, density_vec};
     std::vector<uint32_t> dims_masked;
@@ -93,7 +98,7 @@ void refactor_singleZone(int rank, int num_elements, std::vector<Type>& velocity
         rel_ebs.push_back(eb);
     }
     for(int i=0; i<n_vars; i++){
-        std::string rdir_prefix = "/pscratch/xli281_uksr/xliang/GE/block_" + std::to_string(rank) + "_refactored/" + var_name_out[i] + "/";
+        std::string rdir_prefix = data_prefix_path + "/refactor/block_" + std::to_string(rank) + "_refactored/" + var_name_out[i] + "/";
         if(i < 3){
             // use masked refactoring for vx vy vz
             int index = 0;
@@ -128,12 +133,16 @@ int main(int argc, char **argv) {
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
-    //if(size != 64){
-    //    std::cout << "Need to use 64 processors for 64 blocks\n";
-    //    MPI_Abort(MPI_COMM_WORLD, -1);
-    //}
 
-    std::string filename = "/pscratch/xli281_uksr/xliang/GE/sol_4114800_aver_b" + std::to_string(rank) + ".bp";
+    int argv_id = 1;
+	std::string data_prefix_path(argv[argv_id++]);
+
+	struct timespec start, end;
+	int err;
+	double elapsed_time;
+	err = clock_gettime(CLOCK_REALTIME, &start);
+
+    std::string filename = data_prefix_path + "/data/sol_4114800_aver_b" + std::to_string(rank) + ".bp";
     adios2::ADIOS ad; 
     adios2::IO reader_io = ad.DeclareIO("Input");
     adios2::Engine reader = reader_io.Open(filename, adios2::Mode::Read);
@@ -160,10 +169,13 @@ int main(int argc, char **argv) {
             reader.PerformGets();
             //print_info(rank, var_name[i], vars_vec[i]);
         }
-	    refactor_singleZone(rank, vars_vec[0].size(), vars_vec[0], vars_vec[1], vars_vec[2], vars_vec[3], vars_vec[4]); 
+	    refactor_singleZone(data_prefix_path, rank, vars_vec[0].size(), vars_vec[0], vars_vec[1], vars_vec[2], vars_vec[3], vars_vec[4]); 
         reader.EndStep();
     }
     reader.Close();
+
+	err = clock_gettime(CLOCK_REALTIME, &end);
+	printf("elapsed_time = %.6f\n", elapsed_time);
 
     MPI_Finalize();
     

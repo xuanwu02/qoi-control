@@ -78,6 +78,9 @@ int main(int argc, char **argv){
 	int id_i = atoi(argv[argv_id++]);
 	int id_j = atoi(argv[argv_id++]);
 	double target_rel_eb = atof(argv[argv_id++]);
+	std::string data_prefix_path = argv[argv_id++];
+	std::string data_file_prefix = data_prefix_path + "/data/";
+	std::string rdata_file_prefix = data_prefix_path + "/refactor/";
 
 	std::vector<int> index = {id_i, id_j};
 
@@ -101,6 +104,12 @@ int main(int argc, char **argv){
     std::vector<std::vector<T>> reconstructed_vars(n_variable, std::vector<double>(num_elements));
 	std::vector<size_t> total_retrieved_sizes(n_variable, 0);
 
+	struct timespec start, end;
+	int err;
+	double elapsed_time;
+
+	err = clock_gettime(CLOCK_REALTIME, &start);
+
     int iter = 0;
     int max_iter = 5;
 	bool tolerance_met = false;
@@ -115,7 +124,7 @@ int main(int argc, char **argv){
             auto file_ind = find_index(ebs[i]/var_range[i], file_eb);
             std::cout << "file_ind = " << file_ind << std::endl;
             std::cout << "Requested relative tolerance = " << ebs[i]/var_range[i] << ", expected relative tolerance = " << file_eb << "\n";            
-            std::string filename = rdir_prefix + "_refactored_data/SZ3_eb_" + std::to_string(file_ind) + ".bin";
+            std::string filename = rdir_prefix + "_refactored/SZ3_eb_" + std::to_string(file_ind) + ".bin";
             size_t n = 0;
             auto cmpData = MGARD::readfile<char>(filename.c_str(), n);
             SZ3_decompress(cmpData.data(), n, reconstructed_data);
@@ -144,6 +153,9 @@ int main(int argc, char **argv){
 	    max_est_error = print_max_abs(name + " error_est", error_est_XiXj);   	
 	    max_act_error = print_max_abs(name + " actual error", error_XiXj);
     }
+	err = clock_gettime(CLOCK_REALTIME, &end);
+	elapsed_time = (double)(end.tv_sec - start.tv_sec) + (double)(end.tv_nsec - start.tv_nsec)/(double)1000000000;
+
 	std::cout << "requested error = " << tau << std::endl;
 	std::cout << "max_est_error = " << max_est_error << std::endl;
 	std::cout << "max_act_error = " << max_act_error << std::endl;
@@ -158,7 +170,7 @@ int main(int argc, char **argv){
     std::cout << std::endl;
 	// MDR::print_vec(total_retrieved_size);
 	std::cout << "aggregated cr = " << cr << std::endl;
-
+	printf("elapsed_time = %.6f\n", elapsed_time);
 
 	return 0;
 }

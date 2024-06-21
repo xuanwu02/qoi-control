@@ -55,11 +55,15 @@ bool halfing_error_x_squared(const T * X, size_t n, const double tau, double& eb
 int main(int argc, char ** argv){
 
     using T = double;
-    std::string data_name(argv[1]);
-    double target_rel_eb = atof(argv[2]);
+	int argv_id = 1;
+    std::string data_name = argv[argv_id++];
+    double target_rel_eb = atof(argv[argv_id++]);
+	std::string data_prefix_path = argv[argv_id++];
+	std::string data_file_prefix = data_prefix_path + "/data/";
+	std::string rdata_file_prefix = data_prefix_path + "/refactor/";
 
     size_t num_elements = 0;
-    X_ori = MGARD::readfile<T>((data_file_prefix+data_name+".dat").c_str(), num_elements);
+    X_ori = MGARD::readfile<T>((data_file_prefix + data_name + ".dat").c_str(), num_elements);
     double eb = compute_value_range(X_ori) * target_rel_eb;
 
     std::vector<T> x2(num_elements);
@@ -67,15 +71,21 @@ int main(int argc, char ** argv){
         x2[i] = X_ori[i] * X_ori[i];
     }
 
+	struct timespec start, end;
+	int err;
+	double elapsed_time;
+
+	err = clock_gettime(CLOCK_REALTIME, &start);
+
     double tau = compute_value_range(x2)*target_rel_eb;
     x2_ori = x2.data();
 
     std::string rdir_prefix = rdata_file_prefix + data_name;
-    std::string metadata_file = rdir_prefix + "_refactored_data/metadata.bin";
+    std::string metadata_file = rdir_prefix + "_refactored/metadata.bin";
     std::vector<std::string> files;
     int num_levels = 5;
     for(int i=0; i<num_levels; i++){
-        std::string filename = rdir_prefix + "_refactored_data/level_" + std::to_string(i) + ".bin";
+        std::string filename = rdir_prefix + "_refactored/level_" + std::to_string(i) + ".bin";
         files.push_back(filename);
     }
     auto decomposer = MGARDHierarchicalDecomposer<T>();
@@ -111,11 +121,15 @@ int main(int argc, char ** argv){
 	    print_max_abs("X^2 error", error_x2);
 	    print_max_abs("X^2 error_est", error_est_x2);   	
     }
+	err = clock_gettime(CLOCK_REALTIME, &end);
+	elapsed_time = (double)(end.tv_sec - start.tv_sec) + (double)(end.tv_nsec - start.tv_nsec)/(double)1000000000;
+
 	std::cout << "iter = " << iter << std::endl;
    
 	double cr = num_elements * sizeof(T) * 1.0 / total_retrieved_size;
 	std::cout << "retrieved size: " << total_retrieved_size << std::endl;
 	std::cout << "aggregated cr = " << cr << std::endl;
+	printf("elapsed_time = %.6f\n", elapsed_time);
 
     return 0;
 }

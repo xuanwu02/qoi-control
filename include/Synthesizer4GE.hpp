@@ -13,8 +13,6 @@
 #include "Refactor/Refactor.hpp"
 #include "SZ3/api/sz.hpp"
 
-const std::string data_file_prefix = "/Users/xuanwu/github/datasets/GE/data/";
-const std::string rdata_file_prefix = "/Users/xuanwu/github/datasets/GE/refactor/";
 const std::vector<std::string> varlist = {"VelocityX", "VelocityY", "VelocityZ", "Pressure", "Density"};
 const int n_vars = 5;
 
@@ -86,7 +84,7 @@ inline int find_index(double target_rel_eb, double& rel_eb){
 }
 
 template<class Type>
-void refactor_GE(){
+void refactor_GE(const std::string data_file_prefix, const std::string rdata_file_prefix){
     size_t num_elements = 0;
     auto pressure_vec = MGARD::readfile<Type>((data_file_prefix + "Pressure.dat").c_str(), num_elements);
     auto density_vec = MGARD::readfile<Type>((data_file_prefix + "Density.dat").c_str(), num_elements);
@@ -113,11 +111,11 @@ void refactor_GE(){
     std::vector<Type> buffer(num_valid_data);
     for(int i=0; i<n_vars; i++){
         std::string rdir_prefix = rdata_file_prefix + varlist[i];
-        std::string metadata_file = rdir_prefix + "_refactored_data/metadata.bin";
+        std::string metadata_file = rdir_prefix + "_refactored/metadata.bin";
         std::vector<std::string> files;
         int num_levels = target_level + 1;
         for(int i=0; i<num_levels; i++){
-            std::string filename = rdir_prefix + "_refactored_data/level_" + std::to_string(i) + ".bin";
+            std::string filename = rdir_prefix + "_refactored/level_" + std::to_string(i) + ".bin";
             files.push_back(filename);
         }
         auto decomposer = MDR::MGARDHierarchicalDecomposer<Type>();
@@ -144,7 +142,7 @@ void refactor_GE(){
 }
 
 template<class Type>
-void refactor_GE_SZ3(){
+void refactor_GE_SZ3(const std::string data_file_prefix, const std::string rdata_file_prefix){
     size_t num_elements = 0;
     auto pressure_vec = MGARD::readfile<Type>((data_file_prefix + "Pressure.dat").c_str(), num_elements);
     auto density_vec = MGARD::readfile<Type>((data_file_prefix + "Density.dat").c_str(), num_elements);
@@ -193,7 +191,7 @@ void refactor_GE_SZ3(){
                 }
             }
             for(int j=0; j<num_snapshot; j++){
-                std::string filename = rdir_prefix + "_refactored_data/SZ3_eb_" + std::to_string(j) + ".bin";
+                std::string filename = rdir_prefix + "_refactored/SZ3_eb_" + std::to_string(j) + ".bin";
                 size_t compressed_size = 0;
                 auto compressed_data = SZ3_compress(num_valid_data, buffer.data(), rel_ebs[j]*value_range[i], compressed_size);
                 MGARD::writefile(filename.c_str(), compressed_data, compressed_size);
@@ -203,7 +201,7 @@ void refactor_GE_SZ3(){
         } 
         else{
             for(int j=0; j<num_snapshot; j++){
-                std::string filename = rdir_prefix + "_refactored_data/SZ3_eb_" + std::to_string(j) + ".bin";
+                std::string filename = rdir_prefix + "_refactored/SZ3_eb_" + std::to_string(j) + ".bin";
                 size_t compressed_size = 0;
                 auto compressed_data = SZ3_compress(num_elements, vars_vec[i].data(), rel_ebs[j]*value_range[i], compressed_size);
                 MGARD::writefile(filename.c_str(), compressed_data, compressed_size);
@@ -214,7 +212,7 @@ void refactor_GE_SZ3(){
 }
 
 template<class Type>
-void refactor_GE_SZ3_delta(){
+void refactor_GE_SZ3_delta(const std::string data_file_prefix, const std::string rdata_file_prefix){
     size_t num_elements = 0;
     auto pressure_vec = MGARD::readfile<Type>((data_file_prefix + "Pressure.dat").c_str(), num_elements);
     auto density_vec = MGARD::readfile<Type>((data_file_prefix + "Density.dat").c_str(), num_elements);
@@ -265,7 +263,7 @@ void refactor_GE_SZ3_delta(){
             std::vector<Type> data_buffer(buffer);
             std::vector<Type> dec_data_buffer(buffer);
             for(int j=0; j<num_snapshot; j++){
-                std::string filename = rdir_prefix + "_refactored_data/SZ3_delta_eb_" + std::to_string(j) + ".bin";
+                std::string filename = rdir_prefix + "_refactored/SZ3_delta_eb_" + std::to_string(j) + ".bin";
                 size_t compressed_size = 0;
                 auto compressed_data = SZ3_compress(num_valid_data, data_buffer.data(), rel_ebs[j]*value_range[i], compressed_size);
                 MGARD::writefile(filename.c_str(), compressed_data, compressed_size);
@@ -281,7 +279,7 @@ void refactor_GE_SZ3_delta(){
             std::vector<Type> data_buffer(vars_vec[i]);
             std::vector<Type> dec_data_buffer(vars_vec[i]);
             for(int j=0; j<num_snapshot; j++){
-                std::string filename = rdir_prefix + "_refactored_data/SZ3_delta_eb_" + std::to_string(j) + ".bin";
+                std::string filename = rdir_prefix + "_refactored/SZ3_delta_eb_" + std::to_string(j) + ".bin";
                 size_t compressed_size = 0;
                 auto compressed_data = SZ3_compress(num_elements, data_buffer.data(), rel_ebs[j]*value_range[i], compressed_size);
                 MGARD::writefile(filename.c_str(), compressed_data, compressed_size);
@@ -296,9 +294,7 @@ void refactor_GE_SZ3_delta(){
 }
 
 template<class Type>
-void refactor_S3D(uint32_t n1, uint32_t n2, uint32_t n3){
-    std::string s3d_data_file_prefix = "/Users/xuanwu/github/datasets/S3D/data/";
-    std::string s3d_rdata_file_prefix = "/Users/xuanwu/github/datasets/S3D/refactor/";
+void refactor_S3D(uint32_t n1, uint32_t n2, uint32_t n3, const std::string s3d_data_file_prefix, const std::string s3d_rdata_file_prefix){
     std::vector<std::string> species = {"H2", "O2", "H2O", "H", "O", "OH"};
     int n_species = species.size();
 
@@ -315,11 +311,11 @@ void refactor_S3D(uint32_t n1, uint32_t n2, uint32_t n3){
 
     for(int i=0; i<n_species; i++){
         std::string rdir_prefix = s3d_rdata_file_prefix + species[i];
-        std::string metadata_file = rdir_prefix + "_refactored_data/metadata.bin";
+        std::string metadata_file = rdir_prefix + "_refactored/metadata.bin";
         std::vector<std::string> files;
         int num_levels = target_level + 1;
         for(int i=0; i<num_levels; i++){
-            std::string filename = rdir_prefix + "_refactored_data/level_" + std::to_string(i) + ".bin";
+            std::string filename = rdir_prefix + "_refactored/level_" + std::to_string(i) + ".bin";
             files.push_back(filename);
         }
         auto decomposer = MDR::MGARDHierarchicalDecomposer<Type>();
@@ -334,9 +330,7 @@ void refactor_S3D(uint32_t n1, uint32_t n2, uint32_t n3){
 }
 
 template<class Type>
-void refactor_S3D_SZ3(uint32_t n1, uint32_t n2, uint32_t n3){
-    std::string s3d_data_file_prefix = "/Users/xuanwu/github/datasets/S3D/data/";
-    std::string s3d_rdata_file_prefix = "/Users/xuanwu/github/datasets/S3D/refactor/";
+void refactor_S3D_SZ3(uint32_t n1, uint32_t n2, uint32_t n3, const std::string s3d_data_file_prefix, const std::string s3d_rdata_file_prefix){
     std::vector<std::string> species = {"H2", "O2", "H2O", "H", "O", "OH"};
     int n_species = species.size();
 
@@ -362,7 +356,7 @@ void refactor_S3D_SZ3(uint32_t n1, uint32_t n2, uint32_t n3){
     for(int i=0; i<n_species; i++){
         std::string rdir_prefix = s3d_rdata_file_prefix + species[i];
         for(int j=0; j<num_snapshot; j++){
-            std::string filename = rdir_prefix + "_refactored_data/SZ3_eb_" + std::to_string(j) + ".bin";
+            std::string filename = rdir_prefix + "_refactored/SZ3_eb_" + std::to_string(j) + ".bin";
             size_t compressed_size = 0;
             auto compressed_data = SZ3_compress_3D(num_elements, n1, n2, n3, vars_vec[i].data(), rel_ebs[j]*value_range[i], compressed_size);
             MGARD::writefile(filename.c_str(), compressed_data, compressed_size);
@@ -372,9 +366,7 @@ void refactor_S3D_SZ3(uint32_t n1, uint32_t n2, uint32_t n3){
 }
 
 template<class Type>
-void refactor_S3D_SZ3_delta(uint32_t n1, uint32_t n2, uint32_t n3){
-    std::string s3d_data_file_prefix = "/Users/xuanwu/github/datasets/S3D/data/";
-    std::string s3d_rdata_file_prefix = "/Users/xuanwu/github/datasets/S3D/refactor/";
+void refactor_S3D_SZ3_delta(uint32_t n1, uint32_t n2, uint32_t n3, const std::string s3d_data_file_prefix, const std::string s3d_rdata_file_prefix){
     std::vector<std::string> species = {"H2", "O2", "H2O", "H", "O", "OH"};
     int n_species = species.size();
 
@@ -403,7 +395,7 @@ void refactor_S3D_SZ3_delta(uint32_t n1, uint32_t n2, uint32_t n3){
         std::vector<Type> data_buffer(vars_vec[i]);
         std::vector<Type> dec_data_buffer(vars_vec[i]);
         for(int j=0; j<num_snapshot; j++){
-            std::string filename = rdir_prefix + "_refactored_data/SZ3_delta_eb_" + std::to_string(j) + ".bin";
+            std::string filename = rdir_prefix + "_refactored/SZ3_delta_eb_" + std::to_string(j) + ".bin";
             size_t compressed_size = 0;
             auto compressed_data = SZ3_compress_3D(num_elements, n1, n2, n3, data_buffer.data(), rel_ebs[j]*value_range[i], compressed_size);
             MGARD::writefile(filename.c_str(), compressed_data, compressed_size);
@@ -416,8 +408,66 @@ void refactor_S3D_SZ3_delta(uint32_t n1, uint32_t n2, uint32_t n3){
     }
 }
 
+/* treat 3d data as 1d due to 0-velocity points */
 template<class Type>
-void refactor_velocities_3d(std::string dataset, uint32_t n1, uint32_t n2, uint32_t n3){
+void refactor_velocities_1D(const std::string data_file_prefix, const std::string rdata_file_prefix){
+    size_t num_elements = 0;
+    auto velocityX_vec = MGARD::readfile<Type>((data_file_prefix + "VelocityX.dat").c_str(), num_elements);
+    auto velocityY_vec = MGARD::readfile<Type>((data_file_prefix + "VelocityY.dat").c_str(), num_elements);
+    auto velocityZ_vec = MGARD::readfile<Type>((data_file_prefix + "VelocityZ.dat").c_str(), num_elements);
+    std::vector<std::vector<Type>> vars_vec = {velocityX_vec, velocityY_vec, velocityZ_vec};
+    std::vector<std::string> var_list = {"VelocityX", "VelocityY", "VelocityZ"};
+    int n_variable = var_list.size();
+    std::vector<uint32_t> dims;
+    dims.push_back(num_elements);
+    // compute masks
+    std::vector<unsigned char> mask(num_elements, 0);
+    int num_valid_data = 0;
+    for(int i=0; i<num_elements; i++){
+        if(velocityX_vec[i]*velocityX_vec[i] + velocityY_vec[i]*velocityY_vec[i] + velocityZ_vec[i]*velocityZ_vec[i] != 0){            
+            mask[i] = 1;
+            num_valid_data ++;
+        }
+    }
+    std::cout << "num_elements = " << num_elements << ", num_valid_data = " << num_valid_data << std::endl;
+    std::string mask_file = rdata_file_prefix + "mask.bin";
+    MGARD::writefile(mask_file.c_str(), mask.data(), mask.size());
+
+    int target_level = 4;
+
+    std::vector<uint32_t> dims_masked;
+    dims_masked.push_back(num_valid_data);
+    std::vector<Type> buffer(num_valid_data);
+    for(int i=0; i<n_variable; i++){
+        std::string rdir_prefix = rdata_file_prefix + var_list[i];
+        std::string metadata_file = rdir_prefix + "_refactored/metadata.bin";
+        std::vector<std::string> files;
+        int num_levels = target_level + 1;
+        for(int i=0; i<num_levels; i++){
+            std::string filename = rdir_prefix + "_refactored/level_" + std::to_string(i) + ".bin";
+            files.push_back(filename);
+        }
+        auto decomposer = MDR::MGARDHierarchicalDecomposer<Type>();
+        auto interleaver = MDR::DirectInterleaver<Type>();
+        auto encoder = MDR::PerBitBPEncoder<Type, uint32_t>();
+        auto compressor = MDR::AdaptiveLevelCompressor(64);
+        auto collector = MDR::SquaredErrorCollector<Type>();
+        auto writer = MDR::ConcatLevelFileWriter(metadata_file, files);
+        auto refactor = generateRefactor<Type>(decomposer, interleaver, encoder, compressor, collector, writer);
+        int index = 0;
+        for(int j=0; j<num_elements; j++){
+            if(mask[j]){
+                buffer[index ++] = vars_vec[i][j];
+            }
+        }
+        std::cout << "index = " << index << std::endl;
+        refactor.refactor(buffer.data(), dims_masked, target_level, num_bitplanes);            
+    }
+}
+
+
+template<class Type>
+void refactor_velocities_3D(std::string dataset, uint32_t n1, uint32_t n2, uint32_t n3, const std::string data_file_prefix, const std::string rdata_file_prefix){
     size_t num_elements = 0;
     auto velocityX_vec = MGARD::readfile<Type>((data_file_prefix + dataset + "_velocity_x.dat").c_str(), num_elements);
     auto velocityY_vec = MGARD::readfile<Type>((data_file_prefix + dataset + "_velocity_x.dat").c_str(), num_elements);
@@ -440,11 +490,11 @@ void refactor_velocities_3d(std::string dataset, uint32_t n1, uint32_t n2, uint3
 
     for(int i=0; i<n_variable; i++){
         std::string rdir_prefix = rdata_file_prefix + var_list[i];
-        std::string metadata_file = rdir_prefix + "_refactored_data/metadata.bin";
+        std::string metadata_file = rdir_prefix + "_refactored/metadata.bin";
         std::vector<std::string> files;
         int num_levels = target_level + 1;
         for(int i=0; i<num_levels; i++){
-            std::string filename = rdir_prefix + "_refactored_data/level_" + std::to_string(i) + ".bin";
+            std::string filename = rdir_prefix + "_refactored/level_" + std::to_string(i) + ".bin";
             files.push_back(filename);
         }
         auto decomposer = MDR::MGARDHierarchicalDecomposer<Type>();

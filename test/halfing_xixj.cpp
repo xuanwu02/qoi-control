@@ -78,6 +78,9 @@ int main(int argc, char **argv){
 	int id_i = atoi(argv[argv_id++]);
 	int id_j = atoi(argv[argv_id++]);
 	double target_rel_eb = atof(argv[argv_id++]);
+	std::string data_prefix_path = argv[argv_id++];
+	std::string data_file_prefix = data_prefix_path + "/data/";
+	std::string rdata_file_prefix = data_prefix_path + "/refactor/";
 
 	std::vector<int> index = {id_i, id_j};
 
@@ -96,14 +99,20 @@ int main(int argc, char **argv){
 	XiXj_ori = XiXj.data();
 	double tau = compute_value_range(XiXj)*target_rel_eb;
 
+	struct timespec start, end;
+	int err;
+	double elapsed_time;
+
+	err = clock_gettime(CLOCK_REALTIME, &start);
+
     std::vector<MDR::ComposedReconstructor<T, MGARDHierarchicalDecomposer<T>, DirectInterleaver<T>, PerBitBPEncoder<T, uint32_t>, AdaptiveLevelCompressor, SignExcludeGreedyBasedSizeInterpreter<MaxErrorEstimatorHB<T>>, MaxErrorEstimatorHB<T>, ConcatLevelFileRetriever>> reconstructors;
     for(int i=0; i<n_variable; i++){
         std::string rdir_prefix = s3d_rdata_file_prefix + species[index[i]];
-        std::string metadata_file = rdir_prefix + "_refactored_data/metadata.bin";
+        std::string metadata_file = rdir_prefix + "_refactored/metadata.bin";
         std::vector<std::string> files;
         int num_levels = 5;
         for(int i=0; i<num_levels; i++){
-            std::string filename = rdir_prefix + "_refactored_data/level_" + std::to_string(i) + ".bin";
+            std::string filename = rdir_prefix + "_refactored/level_" + std::to_string(i) + ".bin";
             files.push_back(filename);
         }
         auto decomposer = MGARDHierarchicalDecomposer<T>();
@@ -149,6 +158,9 @@ int main(int argc, char **argv){
 	    max_est_error = print_max_abs(name + " error_est", error_est_XiXj);   	
 	    max_act_error = print_max_abs(name + " actual error", error_XiXj);
     }
+	err = clock_gettime(CLOCK_REALTIME, &end);
+	elapsed_time = (double)(end.tv_sec - start.tv_sec) + (double)(end.tv_nsec - start.tv_nsec)/(double)1000000000;
+
 	std::cout << "requested error = " << tau << std::endl;
 	std::cout << "max_est_error = " << max_est_error << std::endl;
 	std::cout << "max_act_error = " << max_act_error << std::endl;
@@ -163,7 +175,7 @@ int main(int argc, char **argv){
     std::cout << std::endl;
 	// MDR::print_vec(total_retrieved_size);
 	std::cout << "aggregated cr = " << cr << std::endl;
-
+	printf("elapsed_time = %.6f\n", elapsed_time);
 
 	return 0;
 }

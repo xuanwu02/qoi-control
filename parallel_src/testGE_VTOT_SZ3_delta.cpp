@@ -5,9 +5,10 @@
 #include <cmath>
 #include <bitset>
 #include <numeric>
-#include "adios2.h"
 #include "mpi.h"
+#include "adios2.h"
 #include "utils.hpp"
+#include "qoi_utils.hpp"
 #include "SZ3/api/sz.hpp"
 
 const std::vector<std::string> var_name_out{"VelocityX", "VelocityY", "VelocityZ", "Pressure", "Density"};
@@ -24,63 +25,8 @@ double * Vx_dec = NULL;
 double * Vy_dec = NULL;
 double * Vz_dec = NULL;
 double * V_TOT_ori = NULL;
-double * Temp_ori = NULL;
-double * C_ori = NULL;
-double * Mach_ori = NULL;
-double * PT_ori = NULL;
-double * mu_ori = NULL;
 std::vector<double> error_V_TOT;
-std::vector<double> error_Temp;
-std::vector<double> error_C;
-std::vector<double> error_Mach;
-std::vector<double> error_PT;
-std::vector<double> error_mu;
 std::vector<double> error_est_V_TOT;
-std::vector<double> error_est_Temp;
-std::vector<double> error_est_C;
-std::vector<double> error_est_Mach;
-std::vector<double> error_est_PT;
-std::vector<double> error_est_mu;
-
-template <class T>
-void compute_VTOT(const T * Vx, const T * Vy, const T * Vz, size_t n, T * V_TOT_){
-	for(int i=0; i<n; i++){
-		double V_TOT_2 = Vx[i]*Vx[i] + Vy[i]*Vy[i] + Vz[i]*Vz[i];
-		double V_TOT = sqrt(V_TOT_2);
-		V_TOT_[i] = V_TOT;
-	}
-}
-
-template <class T>
-T compute_value_range(const std::vector<T>& vec){
-	T min = vec[0];
-	T max = vec[0];
-	for(int i=0; i<vec.size(); i++){
-		if(vec[i] < min) min = vec[i];
-		if(vec[i] > max) max = vec[i];
-	}
-	return max - min;
-}
-
-// f(x) = x^2
-template <class T>
-inline double compute_bound_x_square(T x, T eb){
-	return 2*fabs(x)*eb + eb*eb;
-}
-
-// f(x) = sqrt(x)
-template <class T>
-inline double compute_bound_square_root_x(T x, T eb){
-	if(x == 0) {
-		return sqrt(eb);
-	}
-	if(x > eb){
-		return eb / (sqrt(x - eb) + sqrt(x));
-	}
-	else{
-		return eb / sqrt(x);
-	}
-}
 
 template<class T>
 bool halfing_error_V_TOT_uniform(const T * Vx, const T * Vy, const T * Vz, size_t n, const std::vector<unsigned char>& mask, const double tau, std::vector<double>& ebs){
@@ -181,20 +127,32 @@ int main(int argc, char ** argv){
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     using T = double;
+	int argv_id = 1;
+    double target_rel_eb = atof(argv[argv_id++]);
+	std::string data_prefix_path = argv[argv_id++];
+	std::string data_file_prefix = data_prefix_path + "/data/";
+	std::string rdata_file_prefix = data_prefix_path + "/refactor/";
+
     const int target_level = 8;
     // read_file
     size_t num_elements = 0;
-	std::string filename = "/pscratch/xli281_uksr/xliang/GE/sol_4114800_aver_b" + std::to_string(rank) + ".bp/"; 
+	std::string filename = data_file_prefix + "block_" + std::to_string(rank) + "/";
 	Vx_ori = MGARD::readfile<T>((filename + var_name_out[0] + ".dat").c_str(), num_elements);
     Vy_ori = MGARD::readfile<T>((filename + var_name_out[1] + ".dat").c_str(), num_elements);
     Vz_ori = MGARD::readfile<T>((filename + var_name_out[2] + ".dat").c_str(), num_elements);
+    P_ori = MGARD::readfile<T>((filename + var_name_out[3] + ".dat").c_str(), num_elements);
+    D_ori = MGARD::readfile<T>((filename + var_name_out[4] + ".dat").c_str(), num_elements);
 
     double target_rel_eb = atof(argv[1]);
     std::vector<double> ebs;
-    ebs.push_back(compute_value_range(Vx_ori)*target_rel_eb);
-    ebs.push_back(compute_value_range(Vy_ori)*target_rel_eb);
-    ebs.push_back(compute_value_range(Vz_ori)*target_rel_eb);
+    ebs.push_back(compute_value_range(Vx_ori));
+    ebs.push_back(compute_value_range(Vy_ori));
+    ebs.push_back(compute_value_range(Vz_ori));
 	int n_variable = ebs.size();
+
+    for(int i=0; i<ebs.size(); i++){
+    	ebs[i] *= target_rel_eb;
+    }
 
     std::vector<T> V_TOT(num_elements);
     compute_VTOT(Vx_ori.data(), Vy_ori.data(), Vz_ori.data(), num_elements, V_TOT.data());
@@ -213,13 +171,10 @@ int main(int argc, char ** argv){
 	V_TOT_ori = V_TOT.data();
 
     std::vector<double> value_range(n_vars);
-    //for(int i=0; i<n_vars; i++){
-    //    value_range[i] = compute_value_range(vars_vec[i]);
-    //}
     value_range[0] = compute_value_range(Vx_ori);
     value_range[1] = compute_value_range(Vy_ori);
     value_range[2] = compute_value_range(Vz_ori);
-    std::string mask_file = "/pscratch/xli281_uksr/xliang/GE/block_" + std::to_string(rank) + "_refactored/mask.bin";
+    std::string mask_file = rdata_file_prefix + "block_" + std::to_string(rank) + "_refactored/mask.bin";
     size_t num_valid_data = 0;
     auto mask = MGARD::readfile<unsigned char>(mask_file.c_str(), num_valid_data);
 
@@ -237,7 +192,7 @@ int main(int argc, char ** argv){
     while((!tolerance_met) && (iter < max_iter)){
     	iter ++;
 	    for(int i=0; i<n_variable; i++){
-	        std::string rdir_prefix = "/pscratch/xli281_uksr/xliang/GE/block_" + std::to_string(rank) + "_refactored/" + var_name_out[i] + "/";
+	        std::string rdir_prefix = data_file_prefix + "block_" + std::to_string(rank) + "_refactored/" + var_name_out[i] + "/";
             double rel_eb = ebs[i]/value_range[i];
             double file_eb = 0.1;
             auto file_ind = find_index(rel_eb, file_eb);
@@ -250,21 +205,14 @@ int main(int argc, char ** argv){
                     total_retrieved_sizes[i] += n;
 		    		total_size += n;
                     SZ3_decompress(cmpData.data(), n, reconstructed_data);
-                    if(i < 3){
-                        // reconstruct with mask
-                        int index = 0;
-                        for(int j=0; j<num_elements; j++){
-                            if(mask[j]){
-                                reconstructed_vars[i][j] += reconstructed_data[index ++];
-                            }
-                            else reconstructed_vars[i][j] = 0;
-                        }
-                    }
-                    else{
-                        for(int j=0; j<num_elements; j++){
-                            reconstructed_vars[i][j] += reconstructed_data[j];
-                        }
-                    }
+					// reconstruct with mask
+					int index = 0;
+					for(int j=0; j<num_elements; j++){
+						if(mask[j]){
+							reconstructed_vars[i][j] += reconstructed_data[index ++];
+						}
+						else reconstructed_vars[i][j] = 0;
+					}
                 }
                 current_ind[i] = file_ind;
             }
@@ -272,9 +220,6 @@ int main(int argc, char ** argv){
 	    Vx_dec = reconstructed_vars[0].data();
 	    Vy_dec = reconstructed_vars[1].data();
 	    Vz_dec = reconstructed_vars[2].data();
-	    // MGARD::print_statistics(Vx_ori.data(), Vx_dec, num_elements);
-	    // MGARD::print_statistics(Vy_ori.data(), Vy_dec, num_elements);
-	    // MGARD::print_statistics(Vz_ori.data(), Vz_dec, num_elements);
 	    error_V_TOT = std::vector<double>(num_elements);
 	    error_est_V_TOT = std::vector<double>(num_elements);
 	    tolerance_met = halfing_error_V_TOT_uniform(Vx_dec, Vy_dec, Vz_dec, num_elements, mask, tau, ebs);
@@ -282,8 +227,6 @@ int main(int argc, char ** argv){
     free(reconstructed_data);
 	local_elapsed_time += MPI_Wtime();
 	MPI_Reduce(&local_elapsed_time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-    // printf("Processor %d total size = %d\n", rank, total_size);
-    // MPI_Barrier(MPI_COMM_WORLD);
     if(!rank) printf("Target V_TOT error = %.4f\n", tau);
 	double max_error = 0;
 	max_error = print_max_abs(rank, "V_TOT error", error_V_TOT);
@@ -298,12 +241,12 @@ int main(int argc, char ** argv){
 	MPI_Reduce(&num_elements, &total_num, 1, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
 	unsigned long long int total_retrieved = 0;
 	MPI_Reduce(&total_size, &total_retrieved, 1, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
-	if(!rank) printf("Aggregated bitrate = %.4f, retrieved_size = %llu, total_num_elements = %llu\n", 8*total_retrieved * 1.0 / (total_num * n_variable), total_retrieved, total_num);
+	if(!rank) printf("Aggregated bitrate = %.4f, retrieved_size = %ld, total_num_elements = %ld\n", 8*total_retrieved * 1.0 / (total_num * n_variable), total_retrieved, total_num);
 	if(!rank) printf("elapsed_time = %.6f\n", max_time);
 	std::vector<char> data_buffer(num_elements*sizeof(double));
 	printf("Processor %d: ???\n", rank);
     for(int i=0; i<n_variable; i++){
-		std::string rdir_prefix = "/pscratch/xli281_uksr/xliang/GE/block_" + std::to_string(rank) + "_refactored/" + var_name_out[i] + "/";
+	    std::string rdir_prefix = data_file_prefix + "block_" + std::to_string(rank) + "_refactored/" + var_name_out[i] + "/";
     	// copy local data
     	size_t local_size = 0;
     	char * data_buffer_pos = data_buffer.data();
@@ -315,7 +258,7 @@ int main(int argc, char ** argv){
 			data_buffer_pos += n;
 			local_size += n;
     	}
-		printf("Processor %d: local_size = %ld, total_retrieved_size = %ld, total_size = %ld\n", rank, local_size, total_retrieved_sizes[i], total_size);
+		// printf("Processor %d: local_size = %ld, total_retrieved_size = %ld, total_size = %ld\n", rank, local_size, total_retrieved_sizes[i], total_size);
     	unsigned long long int count = local_size;
 		unsigned long long int offset = 0;
 		unsigned long long int buffer = 0;
@@ -329,11 +272,11 @@ int main(int argc, char ** argv){
 			}
 		}
 		MPI_File file;
-		std::string filename = "/pscratch/xli281_uksr/xliang/GE/SZ3_delta_" + var_name_out[i] + "_aggregated.dat";
+		std::string filename = data_file_prefix + "retrieved/SZ3_delta_" + var_name_out[i] + "_aggregated.dat";
 		MPI_File_open(MPI_COMM_WORLD, filename.c_str(), MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &file);
 		MPI_File_write_at(file, offset, data_buffer.data(), local_size, MPI_SIGNED_CHAR, MPI_STATUS_IGNORE);
 		MPI_File_close(&file);
-		printf("Processor %d: offset = %llu, count = %ld, offset + count = %llu\n", rank, offset, local_size, local_size + offset);
+		printf("Processor %d: offset = %ld, count = %ld, offset + count = %ld\n", rank, offset, local_size, local_size + offset);
     }
 	//printf("Processor %d total size = %d\n", rank, total_2);
     MPI_Finalize();

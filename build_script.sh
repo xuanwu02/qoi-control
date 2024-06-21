@@ -47,7 +47,7 @@ cmake -DADIOS2_USE_MPI=OFF -DADIOS2_USE_SZ=OFF -DCMAKE_INSTALL_PREFIX=${external
 make -j 8
 make install
 
-# build MDR-qoi-control
+# build qoi-control
 cd ${source_dir}
 mkdir -p build
 cd build

@@ -23,23 +23,9 @@ double * Vx_dec = NULL;
 double * Vy_dec = NULL;
 double * Vz_dec = NULL;
 double * V_TOT_ori = NULL;
-double * Temp_ori = NULL;
-double * C_ori = NULL;
-double * Mach_ori = NULL;
-double * PT_ori = NULL;
-double * mu_ori = NULL;
 std::vector<double> error_V_TOT;
-std::vector<double> error_Temp;
-std::vector<double> error_C;
-std::vector<double> error_Mach;
-std::vector<double> error_PT;
-std::vector<double> error_mu;
 std::vector<double> error_est_V_TOT;
-std::vector<double> error_est_Temp;
-std::vector<double> error_est_C;
-std::vector<double> error_est_Mach;
-std::vector<double> error_est_PT;
-std::vector<double> error_est_mu;
+
 
 template<class T>
 bool halfing_error_V_TOT_uniform(const T * Vx, const T * Vy, const T * Vz, size_t n, const std::vector<unsigned char>& mask, const double tau, std::vector<double>& ebs){
@@ -100,6 +86,9 @@ int main(int argc, char** argv){
     using T = double;
 	int argv_id = 1;
     double target_rel_eb = atof(argv[argv_id++]);
+	std::string data_prefix_path = argv[argv_id++];
+	std::string data_file_prefix = data_prefix_path + "/data/";
+	std::string rdata_file_prefix = data_prefix_path + "/refactor/";
 
     size_t num_elements = 0;
     Vx_ori = MGARD::readfile<T>((data_file_prefix + "VelocityX.dat").c_str(), num_elements);
@@ -115,6 +104,12 @@ int main(int argc, char** argv){
     for(int i=0; i<n_variable; i++){
         var_range[i] = compute_value_range(vars_vec[i]);
     } 
+
+	struct timespec start, end;
+	int err;
+	double elapsed_time;
+
+	err = clock_gettime(CLOCK_REALTIME, &start);
 
     std::vector<T> V_TOT(num_elements);
     compute_VTOT(Vx_ori.data(), Vy_ori.data(), Vz_ori.data(), num_elements, V_TOT.data());
@@ -145,7 +140,7 @@ int main(int argc, char** argv){
             // std::cout << "Requested  tolerance = " << ebs[i] << ", expected tolerance = " << file_eb * var_range[i] << "\n"; 
             if(file_ind > current_ind[i]){
                 for(int j=current_ind[i]+1; j<=file_ind; j++){
-                    std::string filename = rdir_prefix + "_refactored_data/SZ3_delta_eb_" + std::to_string(j) + ".bin";
+                    std::string filename = rdir_prefix + "_refactored/SZ3_delta_eb_" + std::to_string(j) + ".bin";
                     size_t n = 0;
                     auto cmpData = MGARD::readfile<char>(filename.c_str(), n);
                     total_retrieved_sizes[i] += n;
@@ -180,6 +175,9 @@ int main(int argc, char** argv){
 	    max_est_error = print_max_abs(names[0] + " error_est", error_est_V_TOT); 
 	    max_act_error = print_max_abs(names[0] + " actual error", error_V_TOT);
     }
+	err = clock_gettime(CLOCK_REALTIME, &end);
+	elapsed_time = (double)(end.tv_sec - start.tv_sec) + (double)(end.tv_nsec - start.tv_nsec)/(double)1000000000;
+
 	std::cout << "requested error = " << tau << std::endl;
 	std::cout << "max_est_error = " << max_est_error << std::endl;
 	std::cout << "max_act_error = " << max_act_error << std::endl;
@@ -194,6 +192,7 @@ int main(int argc, char** argv){
 	size_t total_size = std::accumulate(total_retrieved_sizes.begin(), total_retrieved_sizes.end(), 0);
 	double cr = n_variable * num_elements * sizeof(T) * 1.0 / total_size;
 	std::cout << "aggregated cr = " << cr << std::endl;
+	printf("elapsed_time = %.6f\n", elapsed_time);
 
     return 0;
 }

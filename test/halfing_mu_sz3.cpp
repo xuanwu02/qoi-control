@@ -22,23 +22,8 @@ double * D_dec = NULL;
 double * Vx_dec = NULL;
 double * Vy_dec = NULL;
 double * Vz_dec = NULL;
-double * V_TOT_ori = NULL;
-double * Temp_ori = NULL;
-double * C_ori = NULL;
-double * Mach_ori = NULL;
-double * PT_ori = NULL;
 double * mu_ori = NULL;
-std::vector<double> error_V_TOT;
-std::vector<double> error_Temp;
-std::vector<double> error_C;
-std::vector<double> error_Mach;
-std::vector<double> error_PT;
 std::vector<double> error_mu;
-std::vector<double> error_est_V_TOT;
-std::vector<double> error_est_Temp;
-std::vector<double> error_est_C;
-std::vector<double> error_est_Mach;
-std::vector<double> error_est_PT;
 std::vector<double> error_est_mu;
 
 
@@ -110,8 +95,12 @@ bool halfing_error_mu_uniform(const T * P, const T * D, size_t n, const double t
 int main(int argc, char ** argv){
 
     using T = double;
-    double target_rel_eb = atof(argv[1]);
-
+	int argv_id = 1;
+    double target_rel_eb = atof(argv[argv_id++]);
+	std::string data_prefix_path = argv[argv_id++];
+	std::string data_file_prefix = data_prefix_path + "/data/";
+	std::string rdata_file_prefix = data_prefix_path + "/refactor/";
+	
     size_t num_elements = 0;
     P_ori = MGARD::readfile<T>((data_file_prefix + "Pressure.dat").c_str(), num_elements);
     D_ori = MGARD::readfile<T>((data_file_prefix + "Density.dat").c_str(), num_elements);
@@ -124,6 +113,13 @@ int main(int argc, char ** argv){
     for(int i=0; i<n_variable; i++){
         var_range[i] = compute_value_range(vars_vec[i]);
     } 
+
+	struct timespec start, end;
+	int err;
+	double elapsed_time;
+
+	err = clock_gettime(CLOCK_REALTIME, &start);
+
 
     std::vector<T> mu(num_elements);
 	compute_mu(P_ori.data(), D_ori.data(), num_elements, mu.data());
@@ -152,7 +148,7 @@ int main(int argc, char ** argv){
 			// 	std::cout << "reached maximum capacity" << std::endl;
 			// 	file_ind = 7;
 			// }            
-            std::string filename = rdir_prefix + "_refactored_data/SZ3_eb_" + std::to_string(file_ind) + ".bin";
+            std::string filename = rdir_prefix + "_refactored/SZ3_eb_" + std::to_string(file_ind) + ".bin";
             size_t n = 0;
             auto cmpData = MGARD::readfile<char>(filename.c_str(), n);
             SZ3_decompress(cmpData.data(), n, reconstructed_data);
@@ -177,6 +173,9 @@ int main(int argc, char ** argv){
 	    max_est_error = print_max_abs(names[5] + " error_est", error_est_mu); 
 	    max_act_error = print_max_abs(names[5] + " actual error", error_mu);
     }
+	err = clock_gettime(CLOCK_REALTIME, &end);
+	elapsed_time = (double)(end.tv_sec - start.tv_sec) + (double)(end.tv_nsec - start.tv_nsec)/(double)1000000000;
+
 	std::cout << "requested error = " << tau << std::endl;
 	std::cout << "max_est_error = " << max_est_error << std::endl;
 	std::cout << "max_act_error = " << max_act_error << std::endl;
@@ -191,6 +190,7 @@ int main(int argc, char ** argv){
 	size_t total_size = std::accumulate(total_retrieved_sizes.begin(), total_retrieved_sizes.end(), 0);
 	double cr = n_variable * num_elements * sizeof(T) * 1.0 / total_size;
 	std::cout << "aggregated cr = " << cr << std::endl;	
+	printf("elapsed_time = %.6f\n", elapsed_time);
 
     return 0;
 }

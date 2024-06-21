@@ -12,34 +12,15 @@
 
 using namespace MDR;
 
-std::vector<double> P_ori;
-std::vector<double> D_ori;
 std::vector<double> Vx_ori;
 std::vector<double> Vy_ori;
 std::vector<double> Vz_ori;
-double * P_dec = NULL;
-double * D_dec = NULL;
 double * Vx_dec = NULL;
 double * Vy_dec = NULL;
 double * Vz_dec = NULL;
 double * V_TOT_ori = NULL;
-double * Temp_ori = NULL;
-double * C_ori = NULL;
-double * Mach_ori = NULL;
-double * PT_ori = NULL;
-double * mu_ori = NULL;
 std::vector<double> error_V_TOT;
-std::vector<double> error_Temp;
-std::vector<double> error_C;
-std::vector<double> error_Mach;
-std::vector<double> error_PT;
-std::vector<double> error_mu;
 std::vector<double> error_est_V_TOT;
-std::vector<double> error_est_Temp;
-std::vector<double> error_est_C;
-std::vector<double> error_est_Mach;
-std::vector<double> error_est_PT;
-std::vector<double> error_est_mu;
 
 
 template<class T>
@@ -100,10 +81,13 @@ bool halfing_error_V_TOT_uniform(const T * Vx, const T * Vy, const T * Vz, size_
 int main(int argc, char ** argv){
 
     using T = double;
-    int arg_id = 1;
-    std::string dataset(argv[arg_id++]);
-    double target_rel_eb = atof(argv[arg_id++]);
-    std::vector<std::string> var_list = {dataset + "_velocity_x", dataset + "_velocity_y", dataset + "_velocity_z"};
+    int argv_id = 1;
+    double target_rel_eb = atof(argv[argv_id++]);
+	std::string data_prefix_path = argv[argv_id++];
+	std::string data_file_prefix = data_prefix_path + "/data/";
+	std::string rdata_file_prefix = data_prefix_path + "/refactor/";
+
+    std::vector<std::string> var_list = {"VelocityX", "VelocityY", "VelocityZ"};
 	int n_variable = var_list.size();
 
     size_t num_elements = 0;
@@ -121,17 +105,23 @@ int main(int argc, char ** argv){
     double tau = compute_value_range(V_TOT)*target_rel_eb;
 	V_TOT_ori = V_TOT.data();
 
-    std::string mask_file = rdata_file_prefix + dataset + "_mask.bin";
+	struct timespec start, end;
+	int err;
+	double elapsed_time;
+
+	err = clock_gettime(CLOCK_REALTIME, &start);
+
+    std::string mask_file = rdata_file_prefix + "mask.bin";
     size_t num_valid_data = 0;
     auto mask = MGARD::readfile<unsigned char>(mask_file.c_str(), num_valid_data);
     std::vector<MDR::ComposedReconstructor<T, MGARDHierarchicalDecomposer<T>, DirectInterleaver<T>, PerBitBPEncoder<T, uint32_t>, AdaptiveLevelCompressor, SignExcludeGreedyBasedSizeInterpreter<MaxErrorEstimatorHB<T>>, MaxErrorEstimatorHB<T>, ConcatLevelFileRetriever>> reconstructors;
     for(int i=0; i<n_variable; i++){
         std::string rdir_prefix = rdata_file_prefix + var_list[i];
-        std::string metadata_file = rdir_prefix + "_refactored_data/metadata.bin";
+        std::string metadata_file = rdir_prefix + "_refactored/metadata.bin";
         std::vector<std::string> files;
-        int num_levels = 5;
-        for(int i=0; i<num_levels; i++){
-            std::string filename = rdir_prefix + "_refactored_data/level_" + std::to_string(i) + ".bin";
+        int num_levels = 9;
+        for(int j=0; j<num_levels; j++){
+            std::string filename = rdir_prefix + "_refactored/level_" + std::to_string(j) + ".bin";
             files.push_back(filename);
         }
         auto decomposer = MGARDHierarchicalDecomposer<T>();
@@ -157,11 +147,12 @@ int main(int argc, char ** argv){
 	    for(int i=0; i<n_variable; i++){
 	        auto reconstructed_data = reconstructors[i].progressive_reconstruct(ebs[i], -1);
 			total_retrieved_size[i] = reconstructors[i].get_retrieved_size();
-			memcpy(reconstructed_vars[i].data(), reconstructed_data, num_elements*sizeof(T));
+			int index = 0;
 			for(int j=0; j<num_elements; j++){
-				if(!mask[j]){
-					reconstructed_vars[i][j] = 0;
-				} 
+				if(mask[j]){
+					reconstructed_vars[i][j] = reconstructed_data[index ++];
+				}
+				else reconstructed_vars[i][j] = 0;
 			}
 	    }
 	    Vx_dec = reconstructed_vars[0].data();
@@ -181,6 +172,9 @@ int main(int argc, char ** argv){
 	    max_act_error = print_max_abs(names[0] + " error", error_V_TOT);
 	    max_est_error = print_max_abs(names[0] + " error_est", error_est_V_TOT);  
     }
+	err = clock_gettime(CLOCK_REALTIME, &end);
+	elapsed_time = (double)(end.tv_sec - start.tv_sec) + (double)(end.tv_nsec - start.tv_nsec)/(double)1000000000;
+
 	std::cout << "requested error = " << tau << std::endl;
 	std::cout << "max_est_error = " << max_est_error << std::endl;
 	std::cout << "max_act_error = " << max_act_error << std::endl;
@@ -195,6 +189,7 @@ int main(int argc, char ** argv){
     std::cout << std::endl;
 	// MDR::print_vec(total_retrieved_size);
 	std::cout << "aggregated cr = " << cr << std::endl;
+	printf("elapsed_time = %.6f\n", elapsed_time);
 
     return 0;
 }
